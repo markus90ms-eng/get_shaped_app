@@ -68,7 +68,7 @@ function splitFood(text){
  // Kommas in Dezimalzahlen dürfen nicht als Trennzeichen gelten.
  const raw=cleanPrefix(text).replace(/(\d),(\d)/g,'$1§$2');
  return raw.split(/\s*(?:,|;|\+|\bund\b|\bsowie\b|\bplus\b|\bmit\b)\s*/i)
-   .map(s=>s.replace(/§/g,',').trim()).filter(Boolean);
+   .map(s=>s.replace(/§/g,',').replace(/^\s*(?:insgesamt|zusammen|ca\.?|circa|etwa|ungefähr|ungefaehr)\s+(?=\d)/i,'').trim()).filter(Boolean);
 }
 function findFood(label){
  const key=normalize(label),k=' '+key+' ';
