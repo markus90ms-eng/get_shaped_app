@@ -4,7 +4,7 @@
  const $=id=>document.getElementById(id);
  const N=window.GetShapedNutrition||{};
  const foods=N.foods||[];
- const norm=s=>String(s??'').toLocaleLowerCase('de').replace(/ß/g,'ss').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+ const norm=s=>String(s??'').toLocaleLowerCase('de').replace(/ß/g,'ss').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/ae/g,'a').replace(/oe/g,'o').replace(/ue/g,'u').trim().replace(/\s+/g,' ');
  const n=v=>{let x=Number(String(v??'').replace(',','.'));return Number.isFinite(x)?x:NaN};
  const rd=x=>Math.round(x*10)/10;
  const unitParts='milliliter|esslöffel|essloffel|teelöffel|teeloffel|gramm|stücke|stück|stuecke|stueck|liter|kg|ml|stk\\.?|gr|g|el|tl|l';
@@ -28,7 +28,7 @@
    // Längere Bezeichnungen zuerst, damit z. B. Milch 1,5 % nicht als Vollmilch gilt.
    let matches=[];
    for(const f of foods)for(const a of f.aliases||[]){
-     if(key.includes(' '+a+' '))matches.push({f,length:a.length});
+     const alias=norm(a);if(key.includes(' '+alias+' '))matches.push({f,length:alias.length});
    }
    matches.sort((a,b)=>b.length-a.length);
    return matches[0]?.f||null;
@@ -50,7 +50,7 @@
    if(u==='Stück')return item.piece?q*item.piece:NaN;
    if(u==='ml'){
      const k=norm(item.name);
-     return q*(/ol|oel|ghee/.test(k)?.91:/milch|kefir/.test(k)?1.03:1);
+     return q*(/öl/i.test(item.name)||/ghee|butterschmalz/i.test(item.name)?.91:/milch|kefir/.test(k)?1.03:1);
    }
    return q;
  }
@@ -196,7 +196,7 @@
      const old=$(id),repl=old.cloneNode(true);old.replaceWith(repl);
    }
    $('parseSpeech').onclick=()=>parseSpeech();
-   $('nutCalculate').onclick=()=>{if($('quickSpeech').value.trim()&&processedSpeech!==$('quickSpeech').value.trim())parseSpeech();else parseManual()};
+   $('nutCalculate').onclick=()=>{if($('quickSpeech').value.trim()&&processedSpeech!==$('quickSpeech').value.trim())parseSpeech();else if(signature===sign()&&$('foodKcal').value.trim())notify('Die Mengen und Nährwerte sind bereits übernommen. Du kannst die Mahlzeit speichern.');else parseManual()};
    $('recentMeals').onchange=e=>{
      const idx=Number(e.target.value),food=window._recentFoodOptions?.[idx];
      if(e.target.value!==''&&food)fromSaved(food,savedQuantity(food),savedUnit(food));
