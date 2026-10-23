@@ -20,11 +20,13 @@ function usageCounts(){
   }
   return counts;
 }
+// Mischgerichte gehören nicht in die Vorlagen – dort stehen nur einzelne Lebensmittel.
+const MEAL=/pfanne|eintopf|suppe|auflauf|curry|bowl|obstbecher|syrniki|gericht|rezept|\bmit\b|\bund\b|\+|\bvom vortag\b/;
 function buildList(){
   const seen=new Map();
   for(const e of window.GSFoodIndex?.entries?.()||[]){
     const key=norm(e.name);
-    if(!key||seen.has(key)||![e.kcal,e.p,e.c,e.f].every(Number.isFinite))continue;
+    if(!key||e.meal||MEAL.test(key)||seen.has(key)||![e.kcal,e.p,e.c,e.f].every(Number.isFinite))continue;
     seen.set(key,{key,name:e.name,kcal:e.kcal,p:e.p,c:e.c,f:e.f,unit:e.unit==='ml'||/milch|bruhe|saft|kaffee|\btee\b/.test(key)?'ml':'g',piece:!!e.virtualPiece});
   }
   const counts=usageCounts();

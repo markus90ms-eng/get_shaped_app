@@ -36,13 +36,13 @@ function historyEntries(){
   const out=new Map();
   let days={};try{days=(typeof db!=='undefined'&&db.days)||{}}catch(_){}
   const dates=Object.keys(days).sort();                 // aufsteigend: neuere Einträge überschreiben ältere
-  const add=(name,qty,unit,kcal,p,c,f,source)=>{
+  const add=(name,qty,unit,kcal,p,c,f,source,meal=false)=>{
     if(!name||!(qty>0)||!Number.isFinite(kcal))return;
     const key=norm(name);if(!key)return;
     let per,piece=null,virtualPiece=false;
     if(unit==='Stück'){per={kcal,p,c,f};per={kcal:kcal/qty,p:p/qty,c:c/qty,f:f/qty};piece=100;virtualPiece=true}
     else per=perHundred(kcal,p,c,f,qty);
-    out.set(key,{name,kcal:per.kcal,p:per.p,c:per.c,f:per.f,piece,virtualPiece,unit:unit==='ml'?'ml':'g',aliases:[key],source});
+    out.set(key,{name,kcal:per.kcal,p:per.p,c:per.c,f:per.f,piece,virtualPiece,unit:unit==='ml'?'ml':'g',meal,aliases:[key],source});
   };
   for(const date of dates)for(const food of days[date].foods||[]){
     const qty=num(food.quantity)>0?num(food.quantity):num(String(food.grams||'').match(/^\s*(\d+(?:[.,]\d+)?)/)?.[1]);
@@ -50,7 +50,7 @@ function historyEntries(){
     if(food.components?.length>1){
       for(const x of food.components)add(x.name,num(x.quantity),x.unit||'g',num(x.kcal),num(x.p)||0,num(x.c)||0,num(x.f)||0,'Verlauf '+date);
     }
-    add(food.name,qty,unit,num(food.kcal),num(food.p)||0,num(food.c)||0,num(food.f)||0,'Verlauf '+date);
+    add(food.name,qty,unit,num(food.kcal),num(food.p)||0,num(food.c)||0,num(food.f)||0,'Verlauf '+date,food.components?.length>1);
   }
   return [...out.values()];
 }
