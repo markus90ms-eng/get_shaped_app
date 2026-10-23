@@ -211,7 +211,77 @@ function clearDraft(because){
  for(const id of ['foodKcal','foodProtein','foodCarbs','foodFat'])$(id).value='';
  setBreakdown([],because);
 }
-function analyze(text){
+
+const LOOKUP_URL='https://world.openfoodfacts.org/cgi/search.pl';
+let currentUnknown=null,productOffers=[],lastSearchTerm='';
+function renderProductOffers(term,records,info){
+ const node=$('gsProductLookup');
+ if(!node)return;
+ if(!records?.length){node.innerHTML='<div class="warnline">'+escape(info||'Kein übereinstimmendes Produkt gefunden. Bitte genauer benennen oder den Barcode prüfen.')+'</div>';return;}
+ node.innerHTML='<div class="hint"><strong>Produktrecherche: '+escape(term)+'</strong><p class="sub">Ergebnisse von Open Food Facts (ODbL). Bei ähnlich benannten Produkten bitte Marke und Etikett vergleichen; keine ungeprüfte Auswahl.</p>'+
+ records.map((p,i)=>'<button type="button" class="btn second small" data-choose-product="'+i+'" style="display:block;width:100%;text-align:left;margin:6px 0">'+escape(p.name)+' · '+escape(p.brand||'Marke nicht angegeben')+' — '+Math.round(p.kcal)+' kcal/100 g</button>').join('')+
+ '<p class="sub">Suchbegriffe des unbekannten Produkts werden für diese Recherche an Open Food Facts übertragen; deine Tagebuchhistorie und Fotos nicht.</p></div>';
+}
+function offerScore(p,label){
+ const target=normalize(label),name=normalize(p.name),brand=normalize(p.brand);
+ const words=target.split(' ').filter(x=>x.length>2&&!['bio','von','aldi','sud','sued','natur','nur'].includes(x));
+ const good=words.filter(x=>name.includes(x)||brand.includes(x)).length;
+ return good/Math.max(words.length,1)*10+(target===name?20:0)+(target===brand+' '+name?20:0);
+}
+async function researchUnknown(term,fullText,force=false) {
+ const query=String(term||'').trim().slice(0,95),needle=normalize(query);
+ if(!query||lookupBusy)return;
+ if(!force&&Date.now()-lastLookup<6500)return;
+ const ownToken=++lookupToken;
+ const node=$('gsProductLookup');
+ if(!node)return;
+ lastLookup=Date.now();lastSearchTerm=query;currentUnknown=query;lookupBusy=true;
+ node.innerHTML='<div class="hint">🔎 Recherchiere automatisch „'+escape(query)+'“ in der Produktdatenbank …</div>';
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),11500);
+ try{
+   let url=new URL(LOOKUP_URL);
+   for(const [key,value] of [['search_terms',query],['search_simple','1'],['action','process'],['json','1'],['page_size','12'],['fields','code,product_name,product_name_de,brands,nutriments']])url.searchParams.set(key,value);
+   const response=await fetch(url.toString(),{signal:controller.signal,headers:{Accept:'application/json'}});
+   if(!response.ok)throw Error('HTTP '+response.status);
+   const data=await response.json();
+   let candidates=(data.products||[]).map(p=>{
+      let m=p.nutriments||{},kcal=Number(m['energy-kcal_100g']);
+      if(!Number.isFinite(kcal)) {const kj=Number(m['energy-kj_100g']);kcal=Number.isFinite(kj)?kj/4.184:NaN}
+      const pro=Number(m.proteins_100g),carbs=Number(m.carbohydrates_100g),fat=Number(m.fat_100g);
+      if(![kcal,pro,carbs,fat].every(Number.isFinite)||kcal<0||kcal>900||pro<0||carbs<0||fat<0||pro>100||carbs>100||fat>100)return null;
+      const name=String(p.product_name_de||p.product_name||'').trim();
+      return name?{name,brand:String(p.brands||''),kcal,p:pro,c:carbs,f:fat,code:String(p.code||'')}:null;
+   }).filter(Boolean);
+   candidates.sort((a,b)=>offerScore(b,query)-offerScore(a,query));
+   if(ownToken!==lookupToken||$('quickSpeech').value.trim()!==fullText)return;
+   productOffers=candidates.slice(0,7);
+   const best=candidates[0],second=candidates[1];
+   // Nur bei eindeutig identischem Produkt und Brand automatisch übernehmen.
+   const score=best?offerScore(best,query):0,score2=second?offerScore(second,query):0;
+   const strong=best&&score>=26&&score-score2>8&&normalize(query)===normalize(best.name+' '+best.brand);
+   if(strong){learnProduct(query,best);analyze(fullText,false);return}
+   renderProductOffers(query,productOffers,candidates.length?'':"Keine vollständigen, passenden Nährwertangaben in der Datenbank gefunden.");
+ }catch(e){
+   if(ownToken!==lookupToken||$('quickSpeech').value.trim()!==fullText)return;
+   renderProductOffers(query,[],'Automatische Produktrecherche derzeit nicht erreichbar. Grund: '+e.message+'. Die App kann dieses Produkt ohne überprüfte Nährwerte nicht automatisch berechnen.');
+ }finally{clearTimeout(timeout);lookupBusy=false}
+}
+function learnProduct(key,p){
+ const item={name:p.name+' · '+(p.brand||'Produkt'),kcal:p.kcal,p:p.p,c:p.c,f:p.f,source:'Open Food Facts'+(p.code?' / Barcode '+p.code:'')};
+ learned[normalize(key)]=item;
+ try{localStorage.setItem(PRODUCT_STORE,JSON.stringify(learned))}catch(_){}
+}
+function chooseProduct(index) {
+ const p=productOffers[index],term=currentUnknown;
+ if(!p||!term)return;
+ learnProduct(term,p);
+ $('gsProductLookup').innerHTML='';
+ const text=$('quickSpeech').value.trim();
+ if(text)analyze(text,false);
+ else show('Produkt gespeichert. Bitte Mahlzeit erneut auswerten.');
+}
+
+function analyze(text,allowSearch=true){
  const content=String(text||'').trim();
  if(!content){clearDraft();return false}
  const recovered=oldMeal(content);
@@ -221,6 +291,11 @@ function analyze(text){
   setBreakdown([],p.error);
   lastError=p.error;
   show(p.error+' Es wird keine unvollständige Kalorienzahl gespeichert.',true);
+  if(p.unknown&&allowSearch){
+    const lookup=()=>researchUnknown(p.unknown.label,content);
+    if(!lookupBusy&&Date.now()-lastLookup>=6500)lookup();
+    else if(!lookupBusy){clearTimeout(researchTimer);researchTimer=setTimeout(lookup,6500-Math.min(6499,Date.now()-lastLookup));}
+  }
   return false;
  }
  lastError='';fillDraft(p.entries,content);return true;
@@ -260,6 +335,9 @@ function setup(){
  }
  const preview=document.createElement('div');preview.id='gsBreakdown';preview.setAttribute('aria-live','polite');
  $('quickSpeech').closest('.field').appendChild(preview);
+ const productLookup=document.createElement('div');productLookup.id='gsProductLookup';productLookup.setAttribute('aria-live','polite');
+ $('quickSpeech').closest('.field').appendChild(productLookup);
+ productLookup.addEventListener('click',e=>{const el=e.target.closest('[data-choose-product]');if(el)chooseProduct(Number(el.dataset.chooseProduct));});
  $('parseSpeech').onclick=()=>analyze($('quickSpeech').value);
  $('quickSpeech').addEventListener('input',()=>{
   clearTimeout(timer);
@@ -321,7 +399,7 @@ function setup(){
  };
  $('speechHelp').textContent='Mahlzeit in einem Satz sprechen oder schreiben – die App zerlegt die einzelnen Lebensmittel automatisch und zeigt deren Kalorien. Beispiel: „Ein Kaffee mit 100 ml Milch mit 1,5 Prozent Fett und 20 g Datteln“.';
 }
-window.GSMealParserV3={parseFreeText,standardize,splitFood,itemFromSegment,oldMeal,summarize};
+window.GSMealParserV3={parseFreeText,standardize,splitFood,itemFromSegment,oldMeal,summarize,researchUnknown,offerScore};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);
 else setup();
 })();
