@@ -23,9 +23,8 @@ function weekData(){
     const date=datestr(t),d=db.days?.[date];
     const logged=!!d?.foods?.length;
     const a=logged?calc(d):null,fr=d?frame(d):null;
-    const fib=logged&&window.GSWaterFiber?window.GSWaterFiber.fiberOfDay(d):null;
+    const fib=logged&&window.GSFiber?window.GSFiber.fiberOfDay(d):null;
     days.push({date,t,d,logged,a,fr,
-      water:window.GSWaterFiber?.waterOf?window.GSWaterFiber.waterOf(d||{}):0,
       fiber:fib?fib.grams:null,fiberPartial:fib?.partial,
       mins:(d?.activity||[]).reduce((n,x)=>n+num(x.mins),0),
       archive:!logged&&d?.archive&&d.archive.low!=null?(d.archive.low+d.archive.high)/2:null});
@@ -38,7 +37,6 @@ function renderWeek(){
   const end=days[6].t,label=start.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})+' – '+end.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
   const inRange=logged.filter(x=>x.a.kcal>=x.fr.low&&x.a.kcal<=x.fr.high).length;
   const proteinOk=logged.filter(x=>x.a.p>=settings.protein).length;
-  const waterDays=days.filter(x=>x.water>0);
   const fiberDays=logged.filter(x=>x.fiber>0);
   const stat=(k,v,sub)=>'<div class="kpi"><div class="meta">'+k+'</div><div class="num" style="font-size:22px">'+v+'</div>'+(sub?'<div class="tiny">'+sub+'</div>':'')+'</div>';
   host.innerHTML='<div class="section-head"><h2>🗓 Woche</h2><span class="pill">'+esc(label)+'</span></div>'+
@@ -48,7 +46,6 @@ function renderWeek(){
      stat('Im Kalorienrahmen',logged.length?inRange+' / '+logged.length:'—','Tage')+
      stat('Ø Protein',logged.length?fmt(avg(logged.map(x=>x.a.p)))+' g':'—',logged.length?proteinOk+' Tage ≥ '+settings.protein+' g':'')+
      stat('Bewegung',fmt(days.reduce((n,x)=>n+x.mins,0))+' Min.','gesamt')+
-     stat('Ø Wasser',waterDays.length?fmt(avg(waterDays.map(x=>x.water)))+' ml':'—','an '+waterDays.length+' Tagen')+
      stat('Ø Ballaststoffe',fiberDays.length?fmt(avg(fiberDays.map(x=>x.fiber)))+' g':'—','Schätzung')+
    '</div>'+
    '<div style="margin-top:14px">'+days.map(x=>{
@@ -57,7 +54,7 @@ function renderWeek(){
       const val=x.logged?fmt(x.a.kcal)+' kcal':(x.archive?'≈ '+fmt(x.archive)+' kcal':'—');
       const flag=x.logged?(x.a.kcal<x.fr.low?'unter Rahmen':x.a.kcal>x.fr.high?'über Rahmen':'im Rahmen'):(x.archive?'Archiv-Schätzung':'nicht erfasst');
       return '<div class="trend-row" data-go-date="'+x.date+'" style="cursor:pointer"><span class="date" style="width:74px">'+name+'</span><div class="bar"><div class="fill" style="width:'+pct+'%;opacity:'+(x.logged?1:.5)+'"></div></div><b style="min-width:92px">'+val+'</b></div><div class="sub" style="margin:-4px 0 6px 86px;font-size:11px">'+
-        flag+(x.logged?' · '+fmt(x.a.p)+' g P':'')+(x.water?' · '+fmt(x.water)+' ml Wasser':'')+(x.mins?' · '+fmt(x.mins)+' Min. Bewegung':'')+'</div>';
+        flag+(x.logged?' · '+fmt(x.a.p)+' g P':'')+(x.mins?' · '+fmt(x.mins)+' Min. Bewegung':'')+'</div>';
    }).join('')+'</div>'+
    '<p class="sub" style="margin-bottom:0">Leere Tage zählen nicht in den Durchschnitt. Tippe auf einen Tag, um ihn zu öffnen.</p>';
 }
@@ -98,7 +95,7 @@ function renderChart(){
       '<text x="'+L+'" y="'+(H-6)+'" font-size="10" fill="var(--muted)">'+d0+'</text><text x="'+(W-R)+'" y="'+(H-6)+'" text-anchor="end" font-size="10" fill="var(--muted)">'+d1+'</text></svg>'+
       '<div class="mini-stats" style="margin-top:8px"><span>Aktuell <strong>'+fmt1(last.v)+' '+m.unit+'</strong></span><span>7-Tage-Schnitt <strong>'+fmt1(last.ma)+' '+m.unit+'</strong></span>'+
       (ref!==last?'<span>Letzte 14 Tage <strong>'+(delta>0?'+':'')+fmt1(delta)+' '+m.unit+'</strong></span>':'')+'</div>'+
-      '<p class="sub" style="margin-bottom:0">Punkte = Einzelmessungen, Linie = gleitender 7-Tage-Schnitt. Tageswerte schwanken durch Wasser, Salz und Zyklus – achte auf die Linie, nicht auf einzelne Punkte.</p>';
+      '<p class="sub" style="margin-bottom:0">Punkte = Einzelmessungen, Linie = gleitender 7-Tage-Schnitt. Tageswerte schwanken durch Wassereinlagerung, Salz und Zyklus – achte auf die Linie, nicht auf einzelne Punkte.</p>';
   }
   host.innerHTML='<div class="section-head"><h2>📈 Verlauf</h2></div><div class="btnrow" style="margin:10px 0">'+tabs+'</div>'+body;
 }

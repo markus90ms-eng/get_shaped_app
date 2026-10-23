@@ -6,7 +6,7 @@ ctx.window=ctx;vm.createContext(ctx);
 ctx.db={days:{'2026-01-02':{foods:[
   {name:'Linsen-Curry',quantity:400,unit:'g',kcal:520,p:30,c:60,f:14,components:[{name:'Linsen, gekocht',quantity:300,unit:'g',kcal:348,p:27,c:51,f:1},{name:'Kokosmilch',quantity:100,unit:'ml',kcal:170,p:2,c:3,f:17}]},
   {name:'Proteinriegel Haselnuss',quantity:1,unit:'Stück',kcal:210,p:20,c:15,f:9}]}}};
-for(const f of ['initial_data.js','nutrition.js','foodindex.js','water-fiber.js'])vm.runInContext(fs.readFileSync(new URL('../'+f,import.meta.url),'utf8'),ctx);
+for(const f of ['initial_data.js','nutrition.js','foodindex.js','fiber.js'])vm.runInContext(fs.readFileSync(new URL('../'+f,import.meta.url),'utf8'),ctx);
 const match=q=>ctx.GSFoodIndex.match(q);
 const name=q=>match(q)?.name;
 
@@ -28,7 +28,7 @@ assert.equal(JSON.stringify(r.skipped),'["Ohne Werte"]');
 assert.equal(name('quarki'),'Testquark');
 assert.equal(match('Ohne Werte'),null);
 // Ballaststoffe: Tabelle, Zutatenlisten, Mischgerichte bleiben unbekannt
-const W=ctx.GSWaterFiber;
+const W=ctx.GSFiber;
 assert.equal(W.fiberPer100('Chiasamen'),34);
 assert.equal(W.fiberPer100('Hähnchen-Butternut-Pfanne'),null);
 const f=W.fiberOfFood({name:'Linsen-Curry',components:[{name:'Linsen, gekocht',quantity:300,unit:'g'}]});

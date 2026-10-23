@@ -28,7 +28,7 @@ Die automatische Foto-Erkennung braucht ein eigenes, gesichertes Backend (Anleit
 | --- | --- |
 | Erfassen | Freitext/Diktat, Foto, **Barcode-Scan** (Kamera, Foto oder Nummer; Open Food Facts), Schnellvorlage mit allen Einzel-Lebensmitteln (⭐ häufig genutzt, ★ Favoriten), Mahlzeiten wiederverwenden (inkl. Favoriten) |
 | Erkennung | Eigener Lebensmittelkatalog (JSON-Import), Verlauf, Presets, Tippfehler-Toleranz (`foodindex.js`) |
-| Bilanz | Kalorien, Protein, Fett, KH, **Ballaststoffe (Schätzung)**, **Wasser** |
+| Bilanz | Kalorien, Protein, Fett, KH, **Ballaststoffe (Schätzung)** |
 | Verlauf | **Wochenansicht**, **Gewicht/Taille/Oberschenkel** mit 7-Tage-Schnitt, Archiv |
 | Bewegung | Standardarten plus **eigene Arten** (Kalorien-Richtwerte für gängige Sportarten) |
 | Daten | JSON-Backup (zusammenführend), **verschlüsseltes Backup** (AES-GCM), CSV, Backup-Erinnerung |

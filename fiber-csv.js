@@ -1,4 +1,4 @@
-/* Get Shaped – manuelles Ballaststofffeld, CSV-Export mit Wasser und Ballaststoffen. */
+/* Get Shaped – manuelles Ballaststofffeld, CSV-Export mit Ballaststoffen. */
 (() => {
 'use strict';
 const $=id=>document.getElementById(id);
@@ -34,21 +34,19 @@ function setup(){
 }
 
 function exportCSV(){
-  const header=['Datum','Typ','Name','Portion','Kalorien','Protein_g','Kohlenhydrate_g','Fett_g','Ballaststoffe_g','Wasser_ml','Minuten','Schritte','Notiz'];
+  const header=['Datum','Typ','Name','Portion','Kalorien','Protein_g','Kohlenhydrate_g','Fett_g','Ballaststoffe_g','Minuten','Schritte','Notiz'];
   const rows=[header];
   const dates=Object.keys(db.days||{}).sort();
   for(const date of dates){
     const d=db.days[date];
     for(const f of d.foods||[]){
-      const fib=window.GSWaterFiber?.fiberOfFood?window.GSWaterFiber.fiberOfFood(f):null;
+      const fib=window.GSFiber?.fiberOfFood?window.GSFiber.fiberOfFood(f):null;
       const fiber=f.fiber!==undefined&&f.fiber!==null?f.fiber:(fib?(fib.partial?'≥ ':'')+round1(fib.grams):'');
-      rows.push([date,'Essen',f.name,f.grams,f.kcal,f.p,f.c,f.f,fiber,'','','',f.note]);
+      rows.push([date,'Essen',f.name,f.grams,f.kcal,f.p,f.c,f.f,fiber,'','',f.note]);
     }
-    for(const a of d.activity||[])rows.push([date,'Bewegung',a.type,'','','','','','','',a.mins,a.steps,a.note]);
-    const ml=(d.water||[]).reduce((n,w)=>n+(Number(w.ml)||0),0);
-    if(ml>0)rows.push([date,'Wasser','','','','','','','',ml,'','','']);
+    for(const a of d.activity||[])rows.push([date,'Bewegung',a.type,'','','','','','',a.mins,a.steps,a.note]);
     const m=d.measures;
-    if(m&&Object.values(m).some(v=>v!==''&&v!==undefined&&v!==null))rows.push([date,'Messwerte','Gewicht '+(m.weight||'')+' / Taille '+(m.waist||'')+' / Oberschenkel '+(m.thigh||''),'','','','','','','','','',m.feel]);
+    if(m&&Object.values(m).some(v=>v!==''&&v!==undefined&&v!==null))rows.push([date,'Messwerte','Gewicht '+(m.weight||'')+' / Taille '+(m.waist||'')+' / Oberschenkel '+(m.thigh||''),'','','','','','','','',m.feel]);
   }
   const csv='﻿'+rows.map(r=>r.map(csvCell).join(';')).join('\n');
   download('get-shaped-'+datestr(new Date())+'.csv',csv,'text/csv;charset=utf-8');
