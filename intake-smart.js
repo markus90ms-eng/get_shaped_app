@@ -258,6 +258,8 @@ function setup(){
  $('foodGrams').addEventListener('input',onQuantityChanged);
  $('foodUnit').addEventListener('change',onQuantityChanged);
  $('foodName').addEventListener('input',()=>{if(components.length)clearDraft('Lebensmittelbezeichnung geändert; bitte neu berechnen.')});
+ $('preset').addEventListener('change',()=>{if($('preset').value){$('quickSpeech').value='';components=[];basis=null;lastText='';window.GSMealDraftComponents=null;setBreakdown([]);}});
+ $('nutProducts')?.addEventListener('click',e=>{if(e.target.closest('[data-off-idx]')){$('quickSpeech').value='';components=[];basis=null;lastText='';window.GSMealDraftComponents=null;setBreakdown([]);}});
  $('recentMeals').addEventListener('change',e=>{
   const k=e.target.value,f=window._recentFoodOptions?.[Number(k)];
   if(k!==''&&f){$('quickSpeech').value='';lastText='';applySaved(f,gramsFromSaved(f),unitFromSaved(f));}
