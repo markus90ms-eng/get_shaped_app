@@ -46,9 +46,10 @@ function dedupe(items){
 }
 function buildList(){
   const seen=new Map();
+  const hiddenKeys=new Set((window.GSFavorites?.hidden?.()||[]).map(x=>x.key));
   for(const e of window.GSFoodIndex?.entries?.()||[]){
     const key=norm(e.name);
-    if(!key||e.meal||MEAL.test(key)||seen.has(key)||![e.kcal,e.p,e.c,e.f].every(Number.isFinite))continue;
+    if(!key||hiddenKeys.has(key)||e.meal||MEAL.test(key)||seen.has(key)||![e.kcal,e.p,e.c,e.f].every(Number.isFinite))continue;
     seen.set(key,{key,name:e.name,kcal:e.kcal,p:e.p,c:e.c,f:e.f,unit:e.unit==='ml'||/milch|bruhe|saft|kaffee|\btee\b/.test(key)?'ml':'g',piece:!!e.virtualPiece});
   }
   const counts=usageCounts();

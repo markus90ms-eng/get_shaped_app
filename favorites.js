@@ -5,10 +5,17 @@ const $=id=>document.getElementById(id);
 const norm=s=>window.GSFoodIndex?.norm?window.GSFoodIndex.norm(s):String(s||'').toLowerCase();
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-function store(){settings.favorites=settings.favorites||{foods:[],meals:[]};settings.favorites.foods=settings.favorites.foods||[];settings.favorites.meals=settings.favorites.meals||[];return settings.favorites}
+function store(){settings.favorites=settings.favorites||{foods:[],meals:[]};settings.favorites.hidden=settings.favorites.hidden||[];settings.favorites.foods=settings.favorites.foods||[];settings.favorites.meals=settings.favorites.meals||[];return settings.favorites}
 function save(){try{localStorage.setItem(CONFIG,JSON.stringify(settings))}catch(_){}}
 const foods=()=>store().foods;
 const meals=()=>store().meals;
+const hidden=()=>store().hidden;                       // [{key,name}] – aus der Schnellvorlage ausgeblendete Lebensmittel
+function hide(key,name){
+  const h=hidden();if(!h.some(x=>x.key===key))h.push({key,name});
+  const fav=foods(),i=fav.indexOf(key);if(i>=0)fav.splice(i,1);
+  save();
+}
+function unhide(key){const h=hidden(),i=h.findIndex(x=>x.key===key);if(i>=0){h.splice(i,1);save()}}
 
 /* ----- Lebensmittel-Favoriten (Stern neben der Schnellvorlage) ----- */
 function updateStar(){
@@ -81,7 +88,7 @@ const baseRender=window.render;
 if(typeof baseRender==='function')window.render=function(){const r=baseRender.apply(this,arguments);try{decorateEntries()}catch(e){console.error(e)}return r};
 const baseRefresh=window.refreshRecent;
 if(typeof baseRefresh==='function')window.refreshRecent=function(){const r=baseRefresh.apply(this,arguments);try{rebuildRecent()}catch(e){console.error(e)}return r};
-window.GSFavorites={foods,meals};
+window.GSFavorites={foods,meals,hidden,hide,unhide};
 const start=()=>{try{setup();window.GSPresets?.rebuildPresets?.();refreshRecent();render()}catch(e){console.error(e)}};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(start,20));else setTimeout(start,20);
 })();

@@ -19,6 +19,7 @@ function syncButton(){
   const item=sel.value===''?null:window.GSPresets?.item?.(Number(sel.value));
   btn.innerHTML=item?'<b>'+esc(item.name)+'</b> <span class="gs-meta">'+esc((item.piece?'1 Stück':'100 '+item.unit)+' · '+Math.round(item.kcal)+' kcal')+'</span>':'<span class="gs-meta">— Frei eingeben —</span>';
 }
+let showHidden=false;
 function render(filter=''){
   const host=$('gsPickerList');if(!host)return;
   const q=norm(filter).split(' ').filter(Boolean);
@@ -27,7 +28,13 @@ function render(filter=''){
     const rows=g.items.filter(x=>q.every(w=>norm(x.item.name).includes(w)));
     if(!rows.length)continue;
     html.push('<div class="gs-group">'+esc(g.label)+'</div>');
-    for(const x of rows)html.push('<button type="button" class="gs-row" data-pick="'+esc(x.value)+'"><b>'+esc(x.item.name)+'</b><span class="gs-meta">'+esc(meta(x))+'</span></button>');
+    for(const x of rows)html.push('<div class="gs-rowwrap"><button type="button" class="gs-row" data-pick="'+esc(x.value)+'"><b>'+esc(x.item.name)+'</b><span class="gs-meta">'+esc(meta(x))+'</span></button><button type="button" class="gs-x" data-hide="'+esc(x.item.key)+'" data-name="'+esc(x.item.name)+'" aria-label="'+esc(x.item.name)+' aus der Liste entfernen" title="Aus der Liste entfernen">×</button></div>');
+  }
+  const hid=window.GSFavorites?.hidden?.()||[];
+  if(hid.length){
+    html.push('<div class="gs-group">Entfernte Lebensmittel ('+hid.length+')</div>');
+    if(showHidden)for(const h of hid)html.push('<div class="gs-rowwrap"><span class="gs-row" style="color:var(--muted)"><b style="color:var(--muted)">'+esc(h.name)+'</b></span><button type="button" class="gs-x gs-back" data-unhide="'+esc(h.key)+'" aria-label="'+esc(h.name)+' wiederherstellen" title="Wiederherstellen">↩</button></div>');
+    html.push('<button type="button" class="gs-row" data-toggle-hidden="1" style="color:var(--muted)">'+(showHidden?'Ausblenden':'Anzeigen und wiederherstellen')+'</button>');
   }
   if(html.length===1)html.push('<p class="sub" style="padding:14px">Kein Lebensmittel gefunden. Du kannst es frei eintippen oder per Barcode hinzufügen.</p>');
   host.innerHTML=html.join('');
@@ -42,6 +49,16 @@ function open(){
     el.addEventListener('click',e=>{if(e.target===el)close()});
     $('gsPickerSearch').addEventListener('input',e=>render(e.target.value));
     $('gsPickerList').addEventListener('click',e=>{
+      const hide=e.target.closest('[data-hide]');
+      if(hide){
+        if(!confirm('„'+hide.dataset.name+'“ aus der Schnellvorlage entfernen?\n\nDeine Einträge und die Texterkennung bleiben unverändert. Du kannst es unten unter „Entfernte Lebensmittel“ wiederherstellen.'))return;
+        window.GSFavorites.hide(hide.dataset.hide,hide.dataset.name);
+        window.GSPresets.rebuildPresets();syncButton();render($('gsPickerSearch').value);
+        toast('Entfernt: '+hide.dataset.name);return;
+      }
+      const back=e.target.closest('[data-unhide]');
+      if(back){window.GSFavorites.unhide(back.dataset.unhide);window.GSPresets.rebuildPresets();render($('gsPickerSearch').value);toast('Wiederhergestellt');return}
+      if(e.target.closest('[data-toggle-hidden]')){showHidden=!showHidden;render($('gsPickerSearch').value);return}
       const b=e.target.closest('[data-pick]');if(!b)return;
       const sel=$('preset');sel.value=b.dataset.pick;
       sel.dispatchEvent(new Event('change',{bubbles:true}));
@@ -49,7 +66,7 @@ function open(){
     });
   }
   el.style.display='flex';document.body.style.overflow='hidden';
-  $('gsPickerSearch').value='';render();
+  showHidden=false;$('gsPickerSearch').value='';render();
   setTimeout(()=>$('gsPickerSearch').focus(),50);
 }
 function close(){const el=$('gsPicker');if(el)el.style.display='none';document.body.style.overflow=''}
@@ -64,7 +81,8 @@ function injectStyle(){
    '.gs-head{display:flex;gap:8px;padding:14px;border-bottom:1px solid var(--border)}.gs-head input{flex:1}'+
    '#gsPickerList{overflow:auto;padding:4px 8px 24px;-webkit-overflow-scrolling:touch}'+
    '.gs-group{position:sticky;top:0;background:var(--paper);font-size:12px;font-weight:800;color:var(--muted);padding:12px 8px 6px;text-transform:uppercase;letter-spacing:.4px}'+
-   '.gs-row{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--border);padding:11px 8px;color:var(--ink);font-size:15px}.gs-row:active{background:var(--green2)}';
+   '.gs-row{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--border);padding:11px 8px;color:var(--ink);font-size:15px}.gs-row:active{background:var(--green2)}'+
+   '.gs-rowwrap{display:flex;align-items:stretch;border-bottom:1px solid var(--border)}.gs-rowwrap .gs-row{border-bottom:0;flex:1;width:auto}.gs-x{flex:0 0 54px;border:0;background:transparent;color:#a0624d;font-size:28px;line-height:1;padding:0 6px;border-radius:0}.gs-x:active{background:var(--green2)}.gs-back{color:var(--green);font-size:22px}';
   document.head.appendChild(s);
 }
 function setup(){
