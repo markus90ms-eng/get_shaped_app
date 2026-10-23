@@ -25,6 +25,8 @@ const FIBER=[
  [/kaffee|kaffe|\btee\b|bruhe|essig|xylit|birkenzucker|gelatine|protein/,0]
 ];
 function fiberPer100(name){
+  const known=window.GSFoodIndex?.match?.(name);
+  if(known&&Number.isFinite(known.fiber100))return known.fiber100;   // z. B. per Barcode eingelesene Produkte
   const n=norm(name);
   if(/pfanne|eintopf|suppe|auflauf|curry|bowl|syrniki|gericht|\bmit\b|\bund\b/.test(n))return null;   // Mischgerichte: Zutaten unbekannt
   for(const [rx,v] of FIBER)if(rx.test(n))return v;

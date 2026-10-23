@@ -1,6 +1,6 @@
-/* Get Shaped PWA v25 – aktuelle Dateien vor Offline-Cache bevorzugen */
-const CACHE='get-shaped-pages-v25';
-const FILES=['./','./index.html','./initial_data.js','./nutrition.js?v=18','./foodindex.js?v=19','./backup-reminder.js?v=19','./water-fiber.js?v=20','./presets-activities.js?v=25','./fiber-csv.js?v=22','./trends.js?v=23','./theme.js?v=24','./theme.css?v=24','./favorites.js?v=25','./app-update.js?v=25','./voice.js?v=18','./intake-smart.js?v=18','./manifest.webmanifest','./icon.svg'];
+/* Get Shaped PWA v26 – aktuelle Dateien vor Offline-Cache bevorzugen */
+const CACHE='get-shaped-pages-v26';
+const FILES=['./','./index.html','./initial_data.js','./nutrition.js?v=18','./foodindex.js?v=19','./backup-reminder.js?v=19','./water-fiber.js?v=20','./presets-activities.js?v=25','./fiber-csv.js?v=22','./trends.js?v=23','./theme.js?v=24','./theme.css?v=24','./favorites.js?v=25','./app-update.js?v=25','./barcode.js?v=26','./voice.js?v=18','./intake-smart.js?v=18','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',event=>event.waitUntil(
  caches.open(CACHE).then(cache=>Promise.allSettled(FILES.map(file=>cache.add(file)))).then(()=>self.skipWaiting())
 ));
