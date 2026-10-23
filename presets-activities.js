@@ -42,9 +42,12 @@ function rebuildPresets(){
   const sel=$('preset');if(!sel)return;
   const keep=sel.value;
   list=buildList();
-  const top=[...list].filter(x=>x.uses>0).sort((a,b)=>b.uses-a.uses||a.name.localeCompare(b.name,'de')).slice(0,TOP);
+  const favKeys=new Set(window.GSFavorites?.foods?.()||[]);
+  const favs=list.filter(x=>favKeys.has(x.key));
+  const top=[...list].filter(x=>x.uses>0&&!favKeys.has(x.key)).sort((a,b)=>b.uses-a.uses||a.name.localeCompare(b.name,'de')).slice(0,TOP);
   const opt=(x)=>'<option value="'+list.indexOf(x)+'">'+esc(label(x,false))+'</option>';
   sel.innerHTML='<option value="">— Frei eingeben —</option>'+
+    (favs.length?'<optgroup label="★ Favoriten">'+favs.map(opt).join('')+'</optgroup>':'')+
     (top.length?'<optgroup label="⭐ Häufig genutzt">'+top.map(x=>'<option value="'+list.indexOf(x)+'">'+esc(label(x,true))+'</option>').join('')+'</optgroup>':'')+
     '<optgroup label="Alle Lebensmittel ('+list.length+')">'+list.map(opt).join('')+'</optgroup>';
   if(keep!==''&&sel.querySelector('option[value="'+keep+'"]'))sel.value=keep;
@@ -147,5 +150,5 @@ function setup(){
   document.querySelector('[data-tab="heute"]')?.addEventListener('click',()=>{try{refreshRecent()}catch(_){refreshAll()}});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(setup,0));else setTimeout(setup,0);
-window.GSPresets={rebuildPresets,rebuildActivities,buildList};
+window.GSPresets={rebuildPresets,rebuildActivities,buildList,selected:()=>active};
 })();
