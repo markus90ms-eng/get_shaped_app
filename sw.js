@@ -1,4 +1,4 @@
-const CACHE='get-shaped-pages-v11';
+const CACHE='get-shaped-pages-v12';
 const FILES=['./','./index.html','./manifest.webmanifest','./initial_data.js','./nutrition.js','./voice.js','./intake.js','./icon.svg'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))),self.clients.claim()])));
