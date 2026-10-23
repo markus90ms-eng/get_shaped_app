@@ -77,7 +77,8 @@ function privateEntries(){
 function entries(){
   if(cache&&Date.now()-cacheAt<2000)return cache;
   // Reihenfolge = Priorität bei Gleichstand: privater Katalog > Verlauf > Presets > Grundkatalog.
-  cache=[...privateEntries(),...historyEntries().reverse(),...presetEntries(),...(window.GetShapedNutrition?.foods||[])];
+  const tier=(list,t)=>list.map(e=>Object.assign(e,{tier:t}));
+  cache=[...tier(privateEntries(),0),...tier(historyEntries().reverse(),1),...tier(presetEntries(),2),...tier((window.GetShapedNutrition?.foods||[]).map(x=>({...x})),3)];
   cacheAt=Date.now();return cache;
 }
 function score(queryTokens,aliasTokens){
@@ -103,9 +104,10 @@ function match(label){
       const alias=norm(raw),words=alias.split(' '),core=words.filter(w=>!FILLER.has(w));
       let s=key===alias?1000:score(qt,core.length?core:words);
       if(s<0)continue;
-      s+=words.filter(w=>FILLER.has(w)&&key.split(' ').includes(w)).length*20;   // „gebraten“, „roh“ … bevorzugen die passende Variante
-      if(!best||s>best.s){best={e,s};tie=false}
-      else if(s===best.s&&best.e!==e&&norm(best.e.name)!==norm(e.name))tie=Math.abs(best.e.kcal-e.kcal)>Math.max(5,best.e.kcal*0.1);
+      s+=words.filter(w=>FILLER.has(w)&&key.split(' ').includes(w)).length*20;
+      if(!words.some(w=>FILLER.has(w))&&!key.split(' ').some(w=>FILLER.has(w)))s+=5;     // ohne Zusatz („roh“, „gebraten“ …) gewinnt der Eintrag ohne Zusatz-Alias   // „gebraten“, „roh“ … bevorzugen die passende Variante
+      if(!best||s>best.s||(s===best.s&&e.tier<best.e.tier)){best={e,s};tie=false}      // gleiche Trefferqualität: eigener Katalog vor Verlauf vor Vorlagen vor Grundkatalog
+      else if(s===best.s&&e.tier===best.e.tier&&best.e!==e&&norm(best.e.name)!==norm(e.name))tie=Math.abs(best.e.kcal-e.kcal)>Math.max(5,best.e.kcal*0.1);
     }
   }
   return best&&!tie?{...best.e}:null;

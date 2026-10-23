@@ -41,4 +41,9 @@ assert.equal(name('Triple Protein'),'LP Triple Protein Vanille');
 assert.equal(name('Daily BioBasics'),'LP Daily Plus');
 assert.equal(Math.round(W.fiberOfFood({name:'LP Shake',quantity:1,unit:'Stück'}).grams*10)/10,13.2);
 assert.equal(W.fiberOfFood({name:'LP Shake',quantity:2,unit:'Stück'}).partial,false);
+// Eigener Katalog hat Vorrang vor widersprüchlichen Verlaufswerten (kein „nicht erkannt“ mehr)
+ctx.db.days['2026-01-03']={foods:[{name:'Testquark',quantity:100,unit:'g',kcal:150,p:12,c:4,f:9}]};
+ctx.GSFoodIndex.entries();           // Cache neu aufbauen lassen
+await new Promise(r=>setTimeout(r,2100));
+assert.equal(match('Testquark').kcal,70);
 console.log('App-Tests ok');
