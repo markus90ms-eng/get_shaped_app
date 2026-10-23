@@ -46,4 +46,8 @@ ctx.db.days['2026-01-03']={foods:[{name:'Testquark',quantity:100,unit:'g',kcal:1
 ctx.GSFoodIndex.entries();           // Cache neu aufbauen lassen
 await new Promise(r=>setTimeout(r,2100));
 assert.equal(match('Testquark').kcal,70);
+// Tvorog nach Fettstufe, Nuggetz
+for(const f of ['dairy-products.js'])vm.runInContext(fs.readFileSync(new URL('../'+f,import.meta.url),'utf8'),ctx);
+assert.equal(match('Tvorog 9 %').kcal,158);assert.equal(match('Tvorog').kcal,130);assert.equal(match('Tvorog 18 %').f,18);
+assert.equal(name('Geflügelnuggetz'),'Reinert Geflügel Nuggetz');
 console.log('App-Tests ok');
