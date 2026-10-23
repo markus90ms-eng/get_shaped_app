@@ -76,11 +76,20 @@ function privateEntries(){
     return {name:x.name,...q,kw,fiber100:Number.isFinite(fib)?fib*100/base:undefined,virtualPiece:x.pro_stueck===true,piece:x.pro_stueck===true?100:(pick(x,'stueckgewicht_g')>0?pick(x,'stueckgewicht_g'):null),unit:String(x.einheit||'').toLowerCase()==='ml'?'ml':'g',aliases:[...new Set(names)],source:x.marke_oder_quelle||'Privater Katalog'};
   });
 }
+let extraBase=[];
+// Zusätzliche Basiseinträge (z. B. Schätzwerte für Gerichte); niedrigste Priorität.
+function registerBase(list){extraBase=extraBase.concat(list);cache=null}
+function refresh(){cache=null;usageCache=null}
+function recipeEntries(){
+  let list=[];try{list=settings.recipes||[]}catch(_){}
+  return list.filter(r=>r&&r.name&&r.per100).map(r=>({name:r.name,kcal:r.per100.kcal,p:r.per100.p,c:r.per100.c,f:r.per100.f,fiber100:r.per100.fiber,
+    piece:r.portionGrams>0?r.portionGrams:null,unit:'g',aliases:[...new Set([r.name,...(r.aliases||[]),(r.name.split(/\s+/).length>1&&r.name.split(/\s+/)[0].length>=4)?r.name.split(/\s+/)[0]:''].filter(Boolean).map(norm))],source:'Eigenes Rezept',recipe:true,id:r.id}));
+}
 function entries(){
   if(cache&&Date.now()-cacheAt<2000)return cache;
   // Reihenfolge = Priorität bei Gleichstand: privater Katalog > Verlauf > Presets > Grundkatalog.
   const tier=(list,t)=>list.map(e=>Object.assign(e,{tier:t}));
-  cache=[...tier(privateEntries(),0),...tier(historyEntries().reverse(),1),...tier(presetEntries(),2),...tier((window.GetShapedNutrition?.foods||[]).map(x=>({...x})),3)];
+  cache=[...tier(recipeEntries(),0),...tier(privateEntries(),0),...tier(historyEntries().reverse(),1),...tier(presetEntries(),2),...tier((window.GetShapedNutrition?.foods||[]).map(x=>({...x})),3),...tier(extraBase.map(x=>({...x})),3)];
   cacheAt=Date.now();return cache;
 }
 function score(queryTokens,aliasTokens){
@@ -96,23 +105,29 @@ function score(queryTokens,aliasTokens){
   }
   return 100+aliasTokens.join('').length-dist*5;
 }
+// Reihenfolge der Suche: 1. eigene Produktliste (Rezepte, eigener Katalog, bisher Gegessenes), 2. Grund- und Schätzwerte; Netzrecherche erst danach (in der App).
 function match(label){
   const key=norm(label);if(!key)return null;
   const q=key.split(' ').filter(w=>!FILLER.has(w));
   const qt=q.length?q:key.split(' ');
-  let best=null,tie=false;
-  for(const e of entries()){
-    for(const raw of e.aliases||[]){
-      const alias=norm(raw),words=alias.split(' '),core=words.filter(w=>!FILLER.has(w));
-      let s=key===alias?1000:score(qt,core.length?core:words);
-      if(s<0)continue;
-      s+=words.filter(w=>FILLER.has(w)&&key.split(' ').includes(w)).length*20;
-      if(!words.some(w=>FILLER.has(w))&&!key.split(' ').some(w=>FILLER.has(w)))s+=5;     // ohne Zusatz („roh“, „gebraten“ …) gewinnt der Eintrag ohne Zusatz-Alias   // „gebraten“, „roh“ … bevorzugen die passende Variante
-      if(!best||s>best.s||(s===best.s&&e.tier<best.e.tier)){best={e,s};tie=false}      // gleiche Trefferqualität: eigener Katalog vor Verlauf vor Vorlagen vor Grundkatalog
-      else if(s===best.s&&e.tier===best.e.tier&&best.e!==e&&norm(best.e.name)!==norm(e.name))tie=Math.abs(best.e.kcal-e.kcal)>Math.max(5,best.e.kcal*0.1);
+  const keyWords=key.split(' ');
+  const all=entries();
+  const search=(list)=>{
+    let best=null,tie=false;
+    for(const e of list){
+      for(const raw of e.aliases||[]){
+        const alias=norm(raw),words=alias.split(' '),core=words.filter(w=>!FILLER.has(w));
+        let s=key===alias?1000:score(qt,core.length?core:words);
+        if(s<0)continue;
+        s+=words.filter(w=>FILLER.has(w)&&keyWords.includes(w)).length*20;               // „gebraten“, „roh“ … bevorzugen die passende Variante
+        if(!words.some(w=>FILLER.has(w))&&!keyWords.some(w=>FILLER.has(w)))s+=5;       // ohne Zusatz gewinnt der Eintrag ohne Zusatz-Alias
+        if(!best||s>best.s||(s===best.s&&(e.tier??9)<(best.e.tier??9))){best={e,s};tie=false}
+        else if(s===best.s&&e.tier===best.e.tier&&best.e!==e&&norm(best.e.name)!==norm(e.name))tie=Math.abs(best.e.kcal-e.kcal)>Math.max(5,best.e.kcal*0.1);
+      }
     }
-  }
-  return best&&!tie?{...best.e}:null;
+    return best&&!tie?{...best.e}:null;
+  };
+  return search(all.filter(e=>(e.tier??9)<=1))||search(all);
 }
 function importCatalogue(json){
   const list=Array.isArray(json)?json:(json?.lebensmittel||json?.foods||[]);
@@ -209,7 +224,7 @@ function suggest(label,limit=5){
       const s=cover*0.45+back*0.2+dice(qj,al)*0.35;
       if(s>best)best=s;
     }
-    best+=Math.min(0.15,(counts.get(norm(e.name))||0)*0.03);
+    best+=Math.min(0.15,(counts.get(norm(e.name))||0)*0.03)+((e.tier??9)<=1?0.08:0);   // eigene Produktliste bevorzugen
     if(best>=0.4){const k=norm(e.name),old=byName.get(k);if(!old||old.s<best)byName.set(k,{e,s:best})}
   }
   // Nahezu identische Einträge (gleiche Nährwerte) nur einmal anbieten.
@@ -232,6 +247,6 @@ function lastPortion(name){
   }
   return null;
 }
-window.GSFoodIndex={match,norm,importCatalogue,entries,historyEntries,phrase,suggest,lastPortion};
+window.GSFoodIndex={match,norm,importCatalogue,entries,historyEntries,phrase,suggest,lastPortion,registerBase,refresh};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setupImportUI);else setupImportUI();
 })();

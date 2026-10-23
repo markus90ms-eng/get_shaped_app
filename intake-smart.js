@@ -9,7 +9,7 @@ const normalize=s=>String(s??'').toLocaleLowerCase('de').replace(/ß/g,'ss')
   .normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ae/g,'a').replace(/oe/g,'o').replace(/ue/g,'u')
   .replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const unitExpr='milliliter|gramm|liter|esslöffel|essloffel|teelöffel|teeloffel|stücke|stück|stuecke|stueck|tassen|tasse|kg|ml|gr|g|l|el|tl|stk\\.?';
+const unitExpr='milliliter|gramm|liter|esslöffel|essloffel|teelöffel|teeloffel|portionen|portion|scheiben|scheibe|stücke|stück|stuecke|stueck|tassen|tasse|kg|ml|gr|g|l|el|tl|stk\\.?';
 const beginRx=new RegExp('^(\\d+(?:[.,]\\d+)?)\\s*(?:('+unitExpr+')\\s*)?\\s+(.+?)\\s*$','i');
 const endRx=new RegExp('^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*('+unitExpr+')\\s*$','i');
 const lowNumbers={ein:1,eine:1,einen:1,einem:1,einer:1,zwei:2,drei:3,vier:4,fuenf:5,fünf:5,sechs:6,sieben:7,acht:8,neun:9,zehn:10,halbe:0.5,halb:0.5,halben:0.5};
@@ -118,7 +118,7 @@ function unitInfo(count,unit,item){
    if(/kaffee|tee/.test(normalize(item.name))){qty=count*200;displayUnit='ml';assumption='Tasse ≈ 200 ml';}
    else return null;
  }
- else if(['stuck','stucke','stueck','stuecke','stk'].includes(u)){
+ else if(['stuck','stucke','stueck','stuecke','stk','portion','portionen','scheibe','scheiben'].includes(u)){
    if(!item.piece)return null;
    displayUnit='Stück';mass=count*item.piece;
    assumption=item.virtualPiece?'gespeicherte Portion (1 Stück)':'Stückgewicht ≈ '+item.piece+' g';
@@ -147,12 +147,14 @@ function entryFromFood(food,amount,unit,label){
      else{unit=food.unit==='ml'?'ml':'g';amount=100;assumed='Menge nicht genannt – 100 '+unit+' angenommen';}
    }
  }
+ // Eigene Einträge kennen oft kein Stückgewicht: dann das Stückgewicht des Grundkatalogs übernehmen (z. B. 1 Zwiebel ≈ 90 g).
+ if(!food.piece){const gen=findFood(label||food.name)||findFood(food.name);if(gen?.piece)food={...food,piece:gen.piece};}
  const q=unitInfo(amount,unit,food);
  if(!q)return {error:'Die Einheit/Portionsgröße bei „'+String(label||food.name).trim()+'“ ist nicht eindeutig.',kind:'unit',label:String(label||food.name).trim()};
  const ratio=q.mass/100;
  return {entry:{name:food.name,qty:q.qty,unit:q.unit,grams:q.mass,
    kcal:food.kcal*ratio,p:food.p*ratio,c:food.c*ratio,f:food.f*ratio,
-   assumption:[assumed,q.assumption].filter(Boolean).join('; '),assumed:!!assumed,
+   assumption:[assumed,q.assumption,food.estimate?'Schätzwert – ein eigenes Rezept ist genauer':''].filter(Boolean).join('; '),assumed:!!assumed,
    source:food.source||'lokale Referenztabelle'}};
 }
 function itemFromSegment(segment){

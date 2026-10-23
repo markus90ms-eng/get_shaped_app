@@ -56,4 +56,11 @@ assert.equal(ph.entry.name,'LP Shake');assert.ok(ph.kwUsed>0);
 assert.equal(ctx.GSFoodIndex.phrase('Magerquark mit Daily'),null);          // fremdes Wort -> mehrere Lebensmittel
 assert.ok(ctx.GSFoodIndex.suggest('Quark Himbeer',5).some(e=>/quark/i.test(e.name)));
 assert.equal(ctx.GSFoodIndex.suggest('Quatschwort',5).length,0);
+// Rezepte: eigene Rezepte vor Schätzwerten; Kurzname aus dem ersten Wort
+for(const f of ['dish-estimates.js'])vm.runInContext(fs.readFileSync(new URL('../'+f,import.meta.url),'utf8'),ctx);
+const est=ctx.GSFoodIndex.match('Chili con Carne');assert.equal(est.estimate,true);assert.equal(est.kcal,120);
+vm.runInContext("var settings={recipes:[{id:'r1',name:'Chili con Carne',aliases:[],per100:{kcal:150,p:10.8,c:5.4,f:8.7,fiber:2},portionGrams:275,portions:4}]}",ctx);
+ctx.GSFoodIndex.refresh();
+await new Promise(r=>setTimeout(r,10));
+assert.equal(match('Chili con Carne').kcal,150);assert.equal(match('Chili').kcal,150);assert.equal(match('Chili').recipe,true);
 console.log('App-Tests ok');

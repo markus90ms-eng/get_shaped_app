@@ -38,6 +38,7 @@ function sameName(a,b){
 function dedupe(items){
   const kept=[];
   for(const it of items){   // Reihenfolge = Priorität (eigener Katalog vor Verlauf, Presets, Grundkatalog)
+    if(it.recipe){kept.push(it);continue}
     const twin=kept.find(k=>sameNutrition(k,it)&&sameName(k,it));
     if(twin){twin.uses=Math.max(twin.uses,it.uses);continue}
     kept.push(it);
@@ -49,8 +50,8 @@ function buildList(){
   const hiddenKeys=new Set((window.GSFavorites?.hidden?.()||[]).map(x=>x.key));
   for(const e of window.GSFoodIndex?.entries?.()||[]){
     const key=norm(e.name);
-    if(!key||hiddenKeys.has(key)||e.meal||MEAL.test(key)||seen.has(key)||![e.kcal,e.p,e.c,e.f].every(Number.isFinite))continue;
-    seen.set(key,{key,name:e.name,kcal:e.kcal,p:e.p,c:e.c,f:e.f,unit:e.unit==='ml'||/milch|bruhe|saft|kaffee|\btee\b/.test(key)?'ml':'g',piece:!!e.virtualPiece});
+    if(!key||hiddenKeys.has(key)||e.meal||(MEAL.test(key)&&!e.recipe)||e.estimate||seen.has(key)||![e.kcal,e.p,e.c,e.f].every(Number.isFinite))continue;
+    seen.set(key,{key,recipe:!!e.recipe,name:e.name,kcal:e.kcal,p:e.p,c:e.c,f:e.f,unit:e.unit==='ml'||/milch|bruhe|saft|kaffee|\btee\b/.test(key)?'ml':'g',piece:!!e.virtualPiece});
   }
   const counts=usageCounts();
   const items=dedupe([...seen.values()].map(x=>({...x,uses:counts.get(x.key)||0})));
@@ -66,10 +67,12 @@ function rebuildPresets(){
   const keep=sel.value;
   list=buildList();
   const favKeys=new Set(window.GSFavorites?.foods?.()||[]);
-  const favs=list.filter(x=>favKeys.has(x.key));
+  const recipes=list.filter(x=>x.recipe);
+  const favs=list.filter(x=>favKeys.has(x.key)&&!x.recipe);
   const top=[...list].filter(x=>x.uses>0&&!favKeys.has(x.key)).sort((a,b)=>b.uses-a.uses||a.name.localeCompare(b.name,'de')).slice(0,TOP);
   const opt=(x)=>'<option value="'+list.indexOf(x)+'">'+esc(label(x,false))+'</option>';
   sel.innerHTML='<option value="">— Frei eingeben —</option>'+
+    (recipes.length?'<optgroup label="🍲 Meine Rezepte">'+recipes.map(opt).join('')+'</optgroup>':'')+
     (favs.length?'<optgroup label="★ Favoriten">'+favs.map(opt).join('')+'</optgroup>':'')+
     (top.length?'<optgroup label="⭐ Häufig genutzt">'+top.map(x=>'<option value="'+list.indexOf(x)+'">'+esc(label(x,true))+'</option>').join('')+'</optgroup>':'')+
     '<optgroup label="Alle Lebensmittel ('+list.length+')">'+list.map(opt).join('')+'</optgroup>';

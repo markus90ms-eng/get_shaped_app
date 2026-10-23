@@ -1,7 +1,7 @@
 /* Get Shaped – „App aktualisieren“ und Versionsanzeige wandern in die Einstellungen. */
 (() => {
 'use strict';
-const APP_VERSION='38';
+const APP_VERSION='40';
 function setup(){
   const bar=document.getElementById('gsForceUpdate')?.closest('.mini-stats');
   const grid=document.querySelector('#tab-einstellungen .grid');
