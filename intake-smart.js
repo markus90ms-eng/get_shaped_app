@@ -182,7 +182,6 @@ function fillDraft(entries,source){
  show('Alle '+entries.length+' Bestandteile erkannt. Gesamt ca. '+Math.round(total.kcal)+' kcal. Prüfe angenommene Portionsgrößen wie Kaffeetassen und Dattelstücke.');
 }
 function clearDraft(because){
- if(!components.length)return;
  components=[];basis=null;lastText='';window.GSMealDraftComponents=null;
  for(const id of ['foodKcal','foodProtein','foodCarbs','foodFat'])$(id).value='';
  setBreakdown([],because);
@@ -211,6 +210,7 @@ function applySaved(f,qty,unit){
 }
 function onQuantityChanged(){
  const q=number($('foodGrams').value),u=getUnit();
+ if(components.length>1){clearDraft('Mehrere Lebensmittel: Bitte die Einzelmengen im Freitext ändern. Das Gesamtgewicht lässt sich nicht eindeutig verteilen.');return;}
  if(!basis||!(q>0)||basis.unit!==u||$('foodName').value!==basis.name){
   if(components.length)clearDraft('Portion geändert. Bitte neu berechnen, damit keine alten Werte verwendet werden.');
   return;
@@ -260,7 +260,7 @@ function setup(){
  $('foodName').addEventListener('input',()=>{if(components.length)clearDraft('Lebensmittelbezeichnung geändert; bitte neu berechnen.')});
  $('recentMeals').addEventListener('change',e=>{
   const k=e.target.value,f=window._recentFoodOptions?.[Number(k)];
-  if(k!==''&&f)applySaved(f,gramsFromSaved(f),unitFromSaved(f));
+  if(k!==''&&f){$('quickSpeech').value='';lastText='';applySaved(f,gramsFromSaved(f),unitFromSaved(f));}
  });
  $('foodEntries').addEventListener('click',e=>{
   const b=e.target.closest('[data-edit-food]');if(!b)return;
