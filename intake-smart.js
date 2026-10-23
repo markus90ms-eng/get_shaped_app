@@ -152,13 +152,22 @@ function unitFromSaved(f){
 }
 function oldMeal(text){
  if(!/\b(gestern|vorgestern|vortag|rest|reste|übrig|ubrig)\b/i.test(text))return null;
- const fn=window.GSMealParser?.findSaved;
- if(typeof fn!=='function')return {error:'Gespeicherte Gerichte konnten nicht durchsucht werden.'};
- const m=fn(text);
- if(m.error)return {error:m.error};
- const f=m.food,original=gramsFromSaved(f),u=unitFromSaved(f);
- if(!(original>0)||u!==m.unit)return {error:'Die gespeicherte Portion hat eine andere Einheit oder kein bekanntes Gewicht.'};
- const factor=m.qty/original,entry={name:f.name,qty:m.qty,unit:m.unit,grams:m.qty,
+ const m=text.match(new RegExp('(\\d+(?:[.,]\\d+)?)\\s*(g|gramm|kg|ml|milliliter|stück|stueck)','i'));
+ if(!m)return {error:'Bitte bei Resten die Portion nennen, z. B. 550 g von der Pfanne von gestern.'};
+ const unit=/stück|stueck/i.test(m[2])?'Stück':/ml|milliliter/i.test(m[2])?'ml':'g';
+ const qty=number(m[1])*(/kg/i.test(m[2])?1000:1);
+ const list=typeof recentFoodOptions==='function'?recentFoodOptions():[];
+ const query=normalize(text.replace(m[0],' ').replace(/^(heute|zum mittag)/i,''))
+   .split(' ').filter(w=>w.length>2&&!new Set(['gestern','vorgestern','vortag','der','die','das','den','von','vom','reste','rest','ich','habe','gegessen','und','mittag','pfanne','heute','zum']).has(w));
+ const date=new Date(selected+'T12:00:00');date.setDate(date.getDate()-(/vorgestern/i.test(text)?2:1));
+ const y=datestr(date);
+ const matches=list.filter(f=>unitFromSaved(f)===unit&&gramsFromSaved(f)>0).map(f=>({f,score:query.filter(w=>normalize(f.name).includes(w)).length*5+(f._date===y?2:0)}))
+   .filter(x=>query.length?x.score>=5:x.f._date===y).sort((a,b)=>b.score-a.score);
+ if(!matches.length||matches[1]&&matches[0].score===matches[1].score)return {error:'Kein eindeutig passendes Gericht im Verlauf gefunden. Verwende die Gerichtsauswahl.'};
+ const f=matches[0].f,original=gramsFromSaved(f),u=unitFromSaved(f);
+ const adjusted={qty,unit};
+ if(!(original>0)||u!==adjusted.unit)return {error:'Die gespeicherte Portion hat eine andere Einheit oder kein bekanntes Gewicht.'};
+ const factor=adjusted.qty/original,entry={name:f.name,qty:adjusted.qty,unit:adjusted.unit,grams:adjusted.qty,
    kcal:Number(f.kcal)*factor,p:Number(f.p)*factor,c:Number(f.c)*factor,f:Number(f.f)*factor,
    source:'gespeichertes Gericht vom '+(f._date||'früheren Tag'),assumption:'gleiches Rezept wie zuvor'};
  return {entries:[entry],saved:true};
