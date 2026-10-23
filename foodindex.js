@@ -71,7 +71,7 @@ function privateEntries(){
     const base=pick(x,'menge')>0?pick(x,'menge'):100;
     const q=perHundred(pick(x,'kcal'),pick(x,'protein_g','protein','p'),pick(x,'kohlenhydrate_g','carbs','c'),pick(x,'fett_g','fat','f'),base);
     const fib=pick(x,'ballaststoffe_g');
-    return {name:x.name,...q,fiber100:Number.isFinite(fib)?fib*100/base:undefined,piece:pick(x,'stueckgewicht_g')>0?pick(x,'stueckgewicht_g'):null,unit:String(x.einheit||'').toLowerCase()==='ml'?'ml':'g',aliases:[...new Set(names)],source:x.marke_oder_quelle||'Privater Katalog'};
+    return {name:x.name,...q,fiber100:Number.isFinite(fib)?fib*100/base:undefined,virtualPiece:x.pro_stueck===true,piece:x.pro_stueck===true?100:(pick(x,'stueckgewicht_g')>0?pick(x,'stueckgewicht_g'):null),unit:String(x.einheit||'').toLowerCase()==='ml'?'ml':'g',aliases:[...new Set(names)],source:x.marke_oder_quelle||'Privater Katalog'};
   });
 }
 function entries(){

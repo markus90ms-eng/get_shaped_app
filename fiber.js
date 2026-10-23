@@ -26,11 +26,18 @@ const FIBER=[
 ];
 function fiberPer100(name){
   const known=window.GSFoodIndex?.match?.(name);
-  if(known&&Number.isFinite(known.fiber100))return known.fiber100;   // z. B. per Barcode eingelesene Produkte
+  if(known&&!known.virtualPiece&&Number.isFinite(known.fiber100))return known.fiber100;   // z. B. per Barcode eingelesene Produkte
   const n=norm(name);
   if(/pfanne|eintopf|suppe|auflauf|curry|bowl|syrniki|gericht|\bmit\b|\bund\b/.test(n))return null;   // Mischgerichte: Zutaten unbekannt
   for(const [rx,v] of FIBER)if(rx.test(n))return v;
   return null;
+}
+// Produkte, die als „1 Stück“ (= eine Portion) hinterlegt sind: fiber100 gilt dort pro Stück.
+function pieceFiber(c){
+  const q=Number(c.quantity??c.qty);
+  if(c.unit!=='Stück'||!(q>0))return null;
+  const m=window.GSFoodIndex?.match?.(c.name);
+  return m&&m.virtualPiece&&Number.isFinite(m.fiber100)?q*m.fiber100:null;
 }
 function gramsOf(c){
   const q=Number(c.quantity??c.qty);
@@ -44,6 +51,8 @@ function fiberOfFood(food){
   const parts=Array.isArray(food.components)&&food.components.length?food.components:[{name:food.name,quantity:food.quantity,unit:food.unit}];
   let sum=0,partial=false;
   for(const c of parts){
+    const direct=pieceFiber(c);
+    if(direct!==null){sum+=direct;continue}
     const per=fiberPer100(c.name),g=gramsOf(c);
     if(per===null||!Number.isFinite(g)){partial=true;continue}
     sum+=per*g/100;

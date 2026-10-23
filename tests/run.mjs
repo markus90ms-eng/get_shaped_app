@@ -6,7 +6,7 @@ ctx.window=ctx;vm.createContext(ctx);
 ctx.db={days:{'2026-01-02':{foods:[
   {name:'Linsen-Curry',quantity:400,unit:'g',kcal:520,p:30,c:60,f:14,components:[{name:'Linsen, gekocht',quantity:300,unit:'g',kcal:348,p:27,c:51,f:1},{name:'Kokosmilch',quantity:100,unit:'ml',kcal:170,p:2,c:3,f:17}]},
   {name:'Proteinriegel Haselnuss',quantity:1,unit:'Stück',kcal:210,p:20,c:15,f:9}]}}};
-for(const f of ['initial_data.js','nutrition.js','foodindex.js','fiber.js'])vm.runInContext(fs.readFileSync(new URL('../'+f,import.meta.url),'utf8'),ctx);
+for(const f of ['initial_data.js','nutrition.js','foodindex.js','fiber.js','lp-products.js'])vm.runInContext(fs.readFileSync(new URL('../'+f,import.meta.url),'utf8'),ctx);
 const match=q=>ctx.GSFoodIndex.match(q);
 const name=q=>match(q)?.name;
 
@@ -34,4 +34,11 @@ assert.equal(W.fiberPer100('Hähnchen-Butternut-Pfanne'),null);
 const f=W.fiberOfFood({name:'Linsen-Curry',components:[{name:'Linsen, gekocht',quantity:300,unit:'g'}]});
 assert.equal(Math.round(f.grams),24);assert.equal(f.partial,false);
 assert.equal(W.fiberOfFood({name:'Mystery-Pfanne',quantity:300,unit:'g'}).partial,true);
+// Lifeplus nach Etikett: 1 Stück = 1 Portion, Ballaststoffe pro Stück
+const shake=match('LP Shake');
+assert.equal(shake.virtualPiece,true);assert.equal(Math.round(shake.kcal),117);assert.equal(shake.p,20);
+assert.equal(name('Triple Protein'),'LP Triple Protein Vanille');
+assert.equal(name('Daily BioBasics'),'LP Daily Plus');
+assert.equal(Math.round(W.fiberOfFood({name:'LP Shake',quantity:1,unit:'Stück'}).grams*10)/10,13.2);
+assert.equal(W.fiberOfFood({name:'LP Shake',quantity:2,unit:'Stück'}).partial,false);
 console.log('App-Tests ok');
