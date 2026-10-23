@@ -109,11 +109,11 @@ function unitInfo(count,unit,item){
  else if(['stuck','stucke','stueck','stuecke','stk'].includes(u)){
    if(!item.piece)return null;
    displayUnit='Stück';mass=count*item.piece;
-   assumption='Stückgewicht ≈ '+item.piece+' g';
+   assumption=item.virtualPiece?'gespeicherte Portion (1 Stück)':'Stückgewicht ≈ '+item.piece+' g';
  }
  else if(!u){
    if(/kaffee|tee/.test(normalize(item.name))){qty=count*200;displayUnit='ml';assumption='Tasse Kaffee ≈ 200 ml (ohne Zucker)';}
-   else if(item.piece){displayUnit='Stück';mass=count*item.piece;assumption='Stückgewicht ≈ '+item.piece+' g';}
+   else if(item.piece){displayUnit='Stück';mass=count*item.piece;assumption=item.virtualPiece?'gespeicherte Portion (1 Stück)':'Stückgewicht ≈ '+item.piece+' g';}
    else return null;
  }else return null;
  if(displayUnit==='ml'){
@@ -136,7 +136,7 @@ function itemFromSegment(segment){
    if(plain&&/kaffee|tee/i.test(plain.name)){label=s;amount=1;unit='';}
    else return {error:'Keine eindeutige Menge für „'+s+'“ (z. B. 20 g oder 100 ml).'};
  }
- const food=findFood(label)||findLearnedProduct(label);
+ const food=findFood(label)||window.GSFoodIndex?.match(label)||findLearnedProduct(label);
  if(!food)return {error:'Lebensmittel „'+label.trim()+'“ nicht erkannt. Ich suche nach dem Produkt.',unknown:{label:label.trim(),amount,unit}};
  const q=unitInfo(amount,unit,food);
  if(!q)return {error:'Die Einheit/Portionsgröße bei „'+label.trim()+'“ ist nicht eindeutig.'};

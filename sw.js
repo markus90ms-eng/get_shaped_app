@@ -1,6 +1,6 @@
-/* Get Shaped PWA v18 – aktuelle Dateien vor Offline-Cache bevorzugen */
-const CACHE='get-shaped-pages-v18';
-const FILES=['./','./index.html','./initial_data.js','./nutrition.js?v=18','./voice.js?v=18','./intake-smart.js?v=18','./manifest.webmanifest','./icon.svg'];
+/* Get Shaped PWA v19 – aktuelle Dateien vor Offline-Cache bevorzugen */
+const CACHE='get-shaped-pages-v19';
+const FILES=['./','./index.html','./initial_data.js','./nutrition.js?v=18','./foodindex.js?v=19','./voice.js?v=18','./intake-smart.js?v=18','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',event=>event.waitUntil(
  caches.open(CACHE).then(cache=>Promise.allSettled(FILES.map(file=>cache.add(file)))).then(()=>self.skipWaiting())
 ));
