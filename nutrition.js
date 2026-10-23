@@ -10,6 +10,8 @@ const escn=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'
 // Bei Marke, Garmethode, Wasserverlust und Fettzugabe abweichende Werte möglich.
 const catalogue = [
 ['Ei',143,12.6,0.7,9.5,'ei|eier|huehnerei',55],
+['Kaffee schwarz (aufgebrüht)',2,0.1,0.3,0,'kaffee|kaffe|kaffee schwarz|schwarzer kaffee|filterkaffee|kaffe schwarz'],
+['Datteln getrocknet',282,2.5,65,0.4,'dattel|datteln|trocken datteln|getrocknete datteln|date|dates',8],
 ['Hähnchenbrust roh',110,23,0,1.5,'haehnchenbrust roh|hahnchenbrust roh|haehnchenbrust|hahnchenbrust|huehnerbrust|huhnchenbrust'],
 ['Hähnchenbrust gegart',165,31,0,3.6,'haehnchenbrust gegart|haehnchenbrust gebraten|haehnchenbrust gekocht|haehnchen gekocht|hahnchen gegart'],
 ['Putenbrust',110,24,0,1.4,'putenbrust|pute|putenschnitzel'],
@@ -35,7 +37,7 @@ const catalogue = [
 ['Rapsöl',884,0,0,100,'rapsol|rapsoel'],
 ['Kokosöl',884,0,0,100,'kokosol|kokosoel'],
 ['Sahne 30 %',292,2.3,3.4,30,'schlagsahne|sahne 30|sahne'],
-['Milch 1,5 %',47,3.4,4.9,1.5,'milch 1 5|fettarme milch'],
+['Milch 1,5 %',47,3.4,4.9,1.5,'milch 1 5|fettarme milch|milch 1 5 prozent|milch 1 5 prozent fett|milch fettarm 1 5'],
 ['Vollmilch',64,3.3,4.8,3.5,'vollmilch|milch 3 5|milch'],
 ['Mandeln',579,21,9,50,'mandeln|mandel'],
 ['Walnüsse',654,15,7,65,'walnusse|walnuss'],
