@@ -22,6 +22,28 @@ function usageCounts(){
 }
 // Mischgerichte gehören nicht in die Vorlagen – dort stehen nur einzelne Lebensmittel.
 const MEAL=/pfanne|eintopf|suppe|auflauf|curry|bowl|obstbecher|syrniki|gericht|rezept|\bmit\b|\bund\b|\+|\bvom vortag\b/;
+// Gleiches Lebensmittel unter leicht anderem Namen (z. B. „Quark 20 %“ und „Quark, 20 % Fett i. Tr.“):
+// gleiche Einheit, praktisch identische Nährwerte und der kürzere Name steckt vollständig im längeren.
+const NAME_NOISE=new Set(['fett','i','tr','in','der','trockenmasse','natur','standardwert','durchschnitt','prozent']);
+const nameTokens=key=>new Set(key.split(' ').filter(w=>w&&!NAME_NOISE.has(w)));
+function sameNutrition(a,b){
+  return a.unit===b.unit&&a.piece===b.piece&&Math.abs(a.kcal-b.kcal)<=Math.max(3,a.kcal*0.03)&&['p','c','f'].every(k=>Math.abs(a[k]-b[k])<=1);
+}
+function sameName(a,b){
+  const x=nameTokens(a.key),y=nameTokens(b.key);
+  if(!x.size||!y.size)return false;
+  const [small,big]=x.size<=y.size?[x,y]:[y,x];
+  return [...small].every(t=>big.has(t));
+}
+function dedupe(items){
+  const kept=[];
+  for(const it of items){   // Reihenfolge = Priorität (eigener Katalog vor Verlauf, Presets, Grundkatalog)
+    const twin=kept.find(k=>sameNutrition(k,it)&&sameName(k,it));
+    if(twin){twin.uses=Math.max(twin.uses,it.uses);continue}
+    kept.push(it);
+  }
+  return kept.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+}
 function buildList(){
   const seen=new Map();
   for(const e of window.GSFoodIndex?.entries?.()||[]){
@@ -30,7 +52,7 @@ function buildList(){
     seen.set(key,{key,name:e.name,kcal:e.kcal,p:e.p,c:e.c,f:e.f,unit:e.unit==='ml'||/milch|bruhe|saft|kaffee|\btee\b/.test(key)?'ml':'g',piece:!!e.virtualPiece});
   }
   const counts=usageCounts();
-  const items=[...seen.values()].map(x=>({...x,uses:counts.get(x.key)||0}));
+  const items=dedupe([...seen.values()].map(x=>({...x,uses:counts.get(x.key)||0})));
   return items.sort((a,b)=>a.name.localeCompare(b.name,'de'));
 }
 function qtyOf(item){return item.piece?1:100}
