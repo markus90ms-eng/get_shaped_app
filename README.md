@@ -20,4 +20,30 @@ Die öffentliche GitHub-Pages-App enthält keine privaten Tagebuchdaten. Diese b
 
 GitHub Pages: **Settings → Pages → Deploy from a branch → main → /(root)**. Auf dem iPhone die App in Safari öffnen und über **Teilen → Zum Home-Bildschirm** ablegen.
 
-Die automatische KI-Fotoerkennung erfordert ein separates, gesichertes Backend. Niemals einen API-Schlüssel in die Webseite oder GitHub hochladen. Fotos liefern keine zuverlässigen Gramm- oder Kalorienmesswerte.
+Die automatische Foto-Erkennung braucht ein eigenes, gesichertes Backend (Anleitung: `worker/README.md`). Niemals einen API-Schlüssel in die Webseite oder GitHub hochladen. Fotos liefern keine zuverlässigen Gramm- oder Kalorienmesswerte.
+
+## Funktionen im Überblick
+
+| Bereich | Was die App kann |
+| --- | --- |
+| Erfassen | Freitext/Diktat, Foto, **Barcode-Scan** (Kamera, Foto oder Nummer; Open Food Facts), Schnellvorlage mit allen Einzel-Lebensmitteln (⭐ häufig genutzt, ★ Favoriten), Mahlzeiten wiederverwenden (inkl. Favoriten) |
+| Erkennung | Eigener Lebensmittelkatalog (JSON-Import), Verlauf, Presets, Tippfehler-Toleranz (`foodindex.js`) |
+| Bilanz | Kalorien, Protein, Fett, KH, **Ballaststoffe (Schätzung)**, **Wasser** |
+| Verlauf | **Wochenansicht**, **Gewicht/Taille/Oberschenkel** mit 7-Tage-Schnitt, Archiv |
+| Bewegung | Standardarten plus **eigene Arten** (Kalorien-Richtwerte für gängige Sportarten) |
+| Daten | JSON-Backup (zusammenführend), **verschlüsseltes Backup** (AES-GCM), CSV, Backup-Erinnerung |
+| Komfort | Dunkelmodus, **Apple-Health-Import per Kurzbefehl** (`#health?weight=…&steps=…&sleep=…`) |
+
+Alle Daten bleiben im Browser (localStorage/IndexedDB). Es gibt keinen Server und keine Synchronisierung.
+
+## Entwicklung
+
+- Jede Funktion liegt in einer eigenen Datei und hängt sich in die bestehende `index.html` ein; neue Dateien werden in `index.html` eingebunden und in `sw.js` (Offline-Cache, Cache-Version erhöhen) eingetragen.
+- Tests: `npm test` (Lebensmittelerkennung, Ballaststoffe, Foto-Backend). Die Tests nutzen nur synthetische Daten.
+- Der Barcode-Leser nutzt die mitgelieferte Bibliothek `vendor/zxing.min.js` (ZXing, Apache-2.0), damit die App ohne CDN auskommt.
+
+## Bewusste Grenzen
+
+- **LiDAR / Tiefendaten:** In Safari nicht auslesbar. Für echte Volumenmessung wäre eine native iOS-App (ARKit `sceneDepth`) nötig; auch dann sind Gewichte nur grobe Schätzungen (Dichte und versteckte Zutaten sind unsichtbar). Die Foto-Analyse nutzt stattdessen zwei Ansichten plus Referenzobjekt.
+- **Push-Erinnerungen** brauchen einen Push-Server und sind in dieser reinen Offline-App nicht enthalten.
+- Ballaststoffe sind Richtwerte aus Tabellen, keine Messwerte.

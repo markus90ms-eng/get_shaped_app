@@ -1,0 +1,11 @@
+name = "get-shaped-photo"
+main = "index.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+ALLOWED_ORIGIN = "https://markus90ms-eng.github.io"
+MODEL = "claude-sonnet-5-5"
+
+# Secrets werden NICHT hier eingetragen, sondern mit:
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler secret put APP_TOKEN
