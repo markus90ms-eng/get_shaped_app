@@ -10,8 +10,22 @@ const escn=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'
 // Bei Marke, Garmethode, Wasserverlust und Fettzugabe abweichende Werte möglich.
 const catalogue = [
 ['Ei',143,12.6,0.7,9.5,'ei|eier|huehnerei',55],
-['Kaffee schwarz (aufgebrüht)',2,0.1,0.3,0,'kaffee|kaffe|kaffee schwarz|schwarzer kaffee|filterkaffee|kaffe schwarz'],
+['Kaffee schwarz (aufgebrüht)',0,0,0,0,'kaffee|kaffe|kaffee schwarz|schwarzer kaffee|filterkaffee|kaffe schwarz|schwarzer kaffe|kaffee ohne zucker'],
 ['Datteln getrocknet',282,2.5,65,0.4,'dattel|datteln|trocken datteln|getrocknete datteln|date|dates',8],
+
+['NUR NUR NATUR Bio-Selleriesalat (ALDI SÜD)',41,0.7,7,0.2,'nur nur natur selleriesalat|nur nur natur bio selleriesalat|aldi nur nur natur selleriesalat|aldi sued nur nur natur selleriesalat',null,'https://www.aldi-sued.de/produkt/nur-nur-natur-bio-sauerkonserven-190-g-selleriesalat-000000000592725003'],
+['ALDI SÜD BIO Kalamata-Oliven',250,1.2,0.1,26.2,'aldi sued bio kalamata oliven|aldi bio kalamata oliven|aldi sud bio kalamata',null,'https://www.aldi-sued.de/produkt/bio-bio-oliven-entsteint-180-g-kalamata-000000000484535002'],
+['Knollensellerie roh',42,1.5,7.4,0.3,'knollensellerie|sellerie knolle|sellerie roh'],
+['Stangensellerie',16,0.7,1.4,0.2,'stangensellerie|staudensellerie'],
+['Rosenkohl',43,3.4,5.2,0.3,'rosenkohl|kohlsprossen'],
+['Harzer Käse',127,30,0,0.7,'harzer kaese|harzer kase|harzer'],
+['Comté Käse',410,28,0.5,33,'comte kaese|comte kase|comte'],
+['Kalamata-Oliven (Durchschnitt)',230,1.5,2,23,'kalamata oliven|kalamata|oliven kalamata'],
+['Gemüsebrühe (klare Brühe)',8,0.3,1,0.2,'gemuesebruehe|gemusebruhe|klare bruehe|bruehe'],
+['Hühnerbrühe (klare Brühe)',12,1.5,0.5,0.4,'huehnerbruehe|huhnerbruhe|huehnerbrühe'],
+['Matcha Pulver',324,30,38,5,'matcha pulver|matcha'],
+['Medjool-Datteln',277,1.8,67,0.2,'medjool datteln|medjool dattel|medjool'],
+
 ['Hähnchenbrust roh',110,23,0,1.5,'haehnchenbrust roh|hahnchenbrust roh|haehnchenbrust|hahnchenbrust|huehnerbrust|huhnchenbrust'],
 ['Hähnchenbrust gegart',165,31,0,3.6,'haehnchenbrust gegart|haehnchenbrust gebraten|haehnchenbrust gekocht|haehnchen gekocht|hahnchen gegart'],
 ['Putenbrust',110,24,0,1.4,'putenbrust|pute|putenschnitzel'],
@@ -81,7 +95,7 @@ const catalogue = [
 ['Tofu natur',120,13,1,7,'tofu'],
 ['Hummus',240,7,13,17,'hummus']
 ];
-const dbItems=catalogue.map(r=>({name:r[0],kcal:r[1],p:r[2],c:r[3],f:r[4],piece:r[6]||null,aliases:r[5].split('|').map(clean)}));
+const dbItems=catalogue.map(r=>({name:r[0],kcal:r[1],p:r[2],c:r[3],f:r[4],piece:r[6]||null,aliases:r[5].split('|').map(clean),source:r[7]||''}));
 let basis=null, expected='', offers=[], busy=false, lastLookup=0;
 const fieldIds=['foodKcal','foodProtein','foodCarbs','foodFat'];
 const signature=()=>clean($n('foodName').value)+'|'+String($n('foodGrams').value).trim();
@@ -277,6 +291,5 @@ function setup(){
   // Keine Änderungen an privater Historie, Foto-Datenbank oder JSON-Backup.
 }
 window.GetShapedNutrition = {foods:dbItems.map(f=>({...f})),normalize:clean};
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);
-else setup();
+if(!window.GS_CORE_ACTIVE){if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);else setup();}
 })();
