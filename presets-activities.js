@@ -80,9 +80,26 @@ function historyActivityTypes(){
   for(const d of Object.values(days))for(const a of d.activity||[])if(a?.type&&!BASE_ACTIVITIES.includes(a.type))out.add(String(a.type).trim());
   return [...out];
 }
+// Richtwerte (MET leicht/moderat/intensiv) für häufige eigene Bewegungsarten; Unbekanntes bleibt bei „Sonstiges“.
+const MET_KEYWORDS=[
+  [/rad|bike|cycl|spinning/,[4,6.8,10]],[/lauf|jogg|run/,[6,8.3,11.5]],[/schwimm/,[4.5,6,9.8]],[/yoga/,[2,2.5,4]],[/pilates/,[2.5,3,4]],
+  [/wander|hik/,[4,5.3,7]],[/tanz/,[3,4.8,7]],[/hiit|intervall|crossfit/,[6,8,10]],[/rudern/,[4.8,7,8.5]],[/kletter|boulder/,[5,7.5,8]],
+  [/tennis/,[5,7.3,8]],[/badminton/,[4.5,5.5,7]],[/fussball|fußball/,[5,7,10]],[/box/,[5,7.8,9]],[/seilspring/,[8,11,12]],[/crosstrainer|ellipt/,[4.6,5,7]],
+  [/ski|langlauf/,[5,7,9]],[/zumba|aerobic/,[4.5,6.5,8]],[/walking|nordic/,[3.5,4.8,6]],[/treppen/,[4,6,8.8]]
+];
+function applyMets(types){
+  let met;try{met=METS}catch(_){return}
+  for(const type of types){
+    if(met[type])continue;
+    const n=String(type).toLocaleLowerCase('de');
+    const hit=MET_KEYWORDS.find(([rx])=>rx.test(n));
+    if(hit)met[type]=hit[1];
+  }
+}
 function rebuildActivities(selectValue){
   const sel=$('activityType');if(!sel)return;
   const custom=[...new Set([...readCustom(),...historyActivityTypes()])].sort((a,b)=>a.localeCompare(b,'de'));
+  applyMets(custom);
   const keep=selectValue??sel.value;
   const base=BASE_ACTIVITIES.filter(x=>x!=='Sonstiges');
   sel.innerHTML=[...base,...custom,'Sonstiges'].map(x=>'<option>'+esc(x)+'</option>').join('')+'<option value="__custom__">✎ Andere Art eingeben …</option>';
