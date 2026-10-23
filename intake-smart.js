@@ -13,7 +13,16 @@ const unitExpr='milliliter|gramm|liter|esslöffel|essloffel|teelöffel|teeloffel
 const beginRx=new RegExp('^(\\d+(?:[.,]\\d+)?)\\s*(?:('+unitExpr+')\\s*)?\\s+(.+?)\\s*$','i');
 const endRx=new RegExp('^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*('+unitExpr+')\\s*$','i');
 const lowNumbers={ein:1,eine:1,einen:1,einem:1,einer:1,zwei:2,drei:3,vier:4,fuenf:5,fünf:5,sechs:6,sieben:7,acht:8,neun:9,zehn:10,halbe:0.5,halb:0.5,halben:0.5};
-let lastText='', components=[], basis=null, timer=null, replaying=false, lastError='';
+let lastText='', components=[], basis=null, timer=null, replaying=false, lastError='',researchTimer=null,lastLookup=0,lookupBusy=false,lookupToken=0;
+const PRODUCT_STORE='get_shaped_local_product_lookup_v1';
+const learned=(()=>{try{return JSON.parse(localStorage.getItem(PRODUCT_STORE)||'{}')}catch(_){return {}}})();
+const externalCache=new Map();
+function findLearnedProduct(label){
+ const key=normalize(label);
+ const f=learned[key];
+ return f&&Number.isFinite(f.kcal)&&Number.isFinite(f.p)&&Number.isFinite(f.c)&&Number.isFinite(f.f)
+    ? {...f,aliases:[key],piece:f.piece||null}:null;
+}
 const getUnit=()=>$('foodUnit')?.value||'g';
 const setUnit=u=>{if($('foodUnit'))$('foodUnit').value=u};
 function show(msg,warn=false) {
@@ -26,7 +35,7 @@ function setBreakdown(items,warning='') {
  const total=items.reduce((a,x)=>a+x.kcal,0);
  out.innerHTML='<div class="card" style="box-shadow:none;padding:13px;margin:10px 0;background:#f3f8f1">'+
  '<h3 style="margin:0 0 8px">Automatische Aufschlüsselung</h3>'+
- items.map(x=>'<div class="macro"><span>'+escape(x.name)+' · '+escape(round(x.qty))+' '+escape(x.unit)+(x.assumption?' <small>(geschätzt)</small>':'')+'</span><b>'+escape(Math.round(x.kcal))+' kcal</b></div>').join('')+
+ items.map(x=>'<div class="macro"><span>'+escape(x.name)+' · '+escape(round(x.qty))+' '+escape(x.unit)+(x.assumption?' <small>('+escape(x.assumption)+')</small>':'')+(x.source&&x.source.startsWith('https://')?' <small><a href="'+escape(x.source)+'" target="_blank" rel="noopener noreferrer">Quelle</a></small>':'')+'</span><b>'+escape(Math.round(x.kcal))+' kcal</b></div>').join('')+
  '<div class="macro" style="border-top:1px solid #c4d8c5;margin-top:6px"><strong>Gesamt</strong><strong>'+Math.round(total)+' kcal</strong></div>'+
  '<p class="sub" style="margin:7px 0 0">Orientierungswerte, keine exakte Messung. Bei unbekannten Zutaten wird die Berechnung nicht gespeichert.</p></div>';
 }
@@ -63,6 +72,13 @@ function splitFood(text){
 }
 function findFood(label){
  const key=normalize(label),k=' '+key+' ';
+ // Nicht eine beliebige Marke mit einem ähnlichen Produkt gleichsetzen.
+ if(/nur nur natur/.test(key)){
+   if(/selleriesalat/.test(key))return foods.find(f=>f.name.includes('NUR NUR NATUR Bio-Selleriesalat'))||null;
+   return null;
+ }
+ if(/aldi/.test(key)&&/bio/.test(key)&&/kalamata/.test(key))
+   return foods.find(f=>f.name.includes('ALDI SÜD BIO Kalamata'))||null;
  const allowed=new Set('natur bio frisch frische gekochte gekocht gegart gebraten gebratenen roh rohe rohen getrocknet getrocknete getrockneten schwarz schwarzer schwarzen fettarm ungesusst ungesuesst ungezückert'.split(' ').map(normalize));
  const matches=[];
  for(const f of foods)for(const a of f.aliases||[]){
@@ -120,14 +136,14 @@ function itemFromSegment(segment){
    if(plain&&/kaffee|tee/i.test(plain.name)){label=s;amount=1;unit='';}
    else return {error:'Keine eindeutige Menge für „'+s+'“ (z. B. 20 g oder 100 ml).'};
  }
- const food=findFood(label);
- if(!food)return {error:'Lebensmittel „'+label.trim()+'“ nicht erkannt. Für Markenprodukte die Produktsuche verwenden.'};
+ const food=findFood(label)||findLearnedProduct(label);
+ if(!food)return {error:'Lebensmittel „'+label.trim()+'“ nicht erkannt. Ich suche nach dem Produkt.',unknown:{label:label.trim(),amount,unit}};
  const q=unitInfo(amount,unit,food);
  if(!q)return {error:'Die Einheit/Portionsgröße bei „'+label.trim()+'“ ist nicht eindeutig.'};
  const ratio=q.mass/100;
  return {entry:{name:food.name,qty:q.qty,unit:q.unit,grams:q.mass,
    kcal:food.kcal*ratio,p:food.p*ratio,c:food.c*ratio,f:food.f*ratio,
-   assumption:q.assumption,source:'lokale Referenztabelle'}};
+   assumption:q.assumption,source:food.source||'lokale Referenztabelle'}};
 }
 function parseFreeText(text){
  const parts=splitFood(text);
@@ -135,7 +151,7 @@ function parseFreeText(text){
  let entries=[];
  for(const p of parts){
   const r=itemFromSegment(p);
-  if(r.error)return {error:r.error,entries};
+  if(r.error)return {error:r.error,entries,unknown:r.unknown||null};
   entries.push(r.entry);
  }
  return {entries};
