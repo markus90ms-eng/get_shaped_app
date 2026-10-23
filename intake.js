@@ -24,13 +24,17 @@
    el.textContent=msg;el.className=warn?'warnline':'hint';el.classList.remove('hidden');
  }
  function foodByName(label){
-   const key=' '+norm(label)+' ';
-   // Längere Bezeichnungen zuerst, damit z. B. Milch 1,5 % nicht als Vollmilch gilt.
+   const key=norm(label);
+   const allowed=new Set('bio frisch frische rohen roh gebraten gegart gekocht hart weich mittelweich natur gedunstet gedampft gedämpft gebacken klein große grosse fettarm natürlich'.split(' ').map(norm));
    let matches=[];
    for(const f of foods)for(const a of f.aliases||[]){
-     const alias=norm(a);if(key.includes(' '+alias+' '))matches.push({f,length:alias.length});
+     const alias=norm(a);
+     if(key===alias){matches.push({f,score:100+alias.length});continue;}
+     if(!(' '+key+' ').includes(' '+alias+' '))continue;
+     const remaining=key.replace(alias,' ').trim().split(' ').filter(Boolean);
+     if(remaining.length&&remaining.every(w=>allowed.has(w)))matches.push({f,score:alias.length});
    }
-   matches.sort((a,b)=>b.length-a.length);
+   matches.sort((a,b)=>b.score-a.score);
    return matches[0]?.f||null;
  }
  function unitOf(raw,qty,item){
@@ -56,19 +60,20 @@
  }
  function normalizePhrase(source){
    let text=String(source||'').trim();
-   for(let i=0;i<5;i++){
+   for(let i=0;i<7;i++){
      let old=text;
      text=text.replace(/^(?:heute|gestern)(?:\s+(?:morgen|mittag|abend))?\s*[,:]?\s*/i,'')
-       .replace(/^(?:zum|als)\s+(?:frühstück|fruehstueck|mittag(?:essen)?|abendessen)\s*[,:]?\s*/i,'')
-       .replace(/^(?:ich\s+(?:habe|hatte|esse)|es\s+gab)\s*/i,'')
+       .replace(/^(?:zum|als|fürs|fuers)\s+(?:frühstück|fruehstueck|mittag(?:essen)?|abendessen)\s*[,:]?\s*/i,'')
+       .replace(/^(?:ich\s+(?:habe|hab|hatte|esse|aß|ass)|habe\s+ich|hab\s+ich|hatte\s+ich|es\s+gab|gab\s+es)\s*/i,'')
        .replace(/^(?:ca\.?|etwa|ungefähr|ungefaehr|insgesamt|davon)\s*/i,'');
      if(text===old)break;
    }
-   return text.replace(/\s+(?:gegessen|verzehrt|gegessen habe)\s*[.!]?\s*$/i,'').trim();
+   return text.replace(/\s+(?:gegessen|verzehrt|gegessen habe|gehabt)\s*[.!]?\s*$/i,'').trim();
  }
  function splitParts(source){
    return normalizePhrase(source).replace(/(\d),(\d)/g,'$1§$2')
-     .split(/\s*(?:,|;|\+|\bund\b)\s*/i).map(x=>x.replace(/§/g,',').trim()).filter(Boolean);
+     .split(/\s*(?:,|;|\+|\bund\b|\bplus\b|\bmit\b(?=\s*(?:\d|ein\b|eine\b|zwei\b|drei\b|vier\b|fünf\b|fuenf\b)))\s*/i)
+     .map(x=>x.replace(/§/g,',').trim()).filter(Boolean);
  }
  function parseText(source,fallback=null){
    const segments=splitParts(source), entries=[];
@@ -169,10 +174,14 @@
    if(!sentence){notify('Bitte zuerst deine Mahlzeit sprechen oder schreiben.',true);return false}
    if(/\b(?:gestern|vorgestern|vortag|rest|reste|übrig|ubrig)\b/i.test(sentence)){
      const match=findSaved(sentence);
-     if(match.error){notify(match.error,true);return false}
-     const success=fromSaved(match.food,match.qty,match.unit);
-     if(success)processedSpeech=sentence;
-     return success;
+     if(!match.error){
+       const success=fromSaved(match.food,match.qty,match.unit);
+       if(success)processedSpeech=sentence;
+       return success;
+     }
+     const fallback=parseText(sentence);
+     if(fallback.entries?.length){const success=fromParsed(fallback);if(success)processedSpeech=sentence;return success;}
+     notify(match.error,true);return false;
    }
    const parsed=parseText(sentence);
    if(parsed.error){notify(parsed.error,true);if(parsed.unknown)$('foodName').value=parsed.unknown;return false}
