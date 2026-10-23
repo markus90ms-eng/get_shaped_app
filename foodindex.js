@@ -42,7 +42,7 @@ function historyEntries(){
     let per,piece=null,virtualPiece=false;
     if(unit==='Stück'){per={kcal,p,c,f};per={kcal:kcal/qty,p:p/qty,c:c/qty,f:f/qty};piece=100;virtualPiece=true}
     else per=perHundred(kcal,p,c,f,qty);
-    out.set(key,{name,kcal:per.kcal,p:per.p,c:per.c,f:per.f,piece,virtualPiece,aliases:[key],source});
+    out.set(key,{name,kcal:per.kcal,p:per.p,c:per.c,f:per.f,piece,virtualPiece,unit:unit==='ml'?'ml':'g',aliases:[key],source});
   };
   for(const date of dates)for(const food of days[date].foods||[]){
     const qty=num(food.quantity)>0?num(food.quantity):num(String(food.grams||'').match(/^\s*(\d+(?:[.,]\d+)?)/)?.[1]);
@@ -70,7 +70,7 @@ function privateEntries(){
     const names=[x.name,plain,...(x.aliases||[])].map(norm).filter(Boolean);
     const base=pick(x,'menge')>0?pick(x,'menge'):100;
     const q=perHundred(pick(x,'kcal'),pick(x,'protein_g','protein','p'),pick(x,'kohlenhydrate_g','carbs','c'),pick(x,'fett_g','fat','f'),base);
-    return {name:x.name,...q,piece:pick(x,'stueckgewicht_g')>0?pick(x,'stueckgewicht_g'):null,aliases:[...new Set(names)],source:x.marke_oder_quelle||'Privater Katalog'};
+    return {name:x.name,...q,piece:pick(x,'stueckgewicht_g')>0?pick(x,'stueckgewicht_g'):null,unit:String(x.einheit||'').toLowerCase()==='ml'?'ml':'g',aliases:[...new Set(names)],source:x.marke_oder_quelle||'Privater Katalog'};
   });
 }
 function entries(){
@@ -120,7 +120,7 @@ function importCatalogue(json){
     merged.set(norm(x.name),x);
   }
   localStorage.setItem(PRIVATE_CATALOGUE,JSON.stringify([...merged.values()]));
-  cache=null;return {total:merged.size,skipped};
+  cache=null;try{window.dispatchEvent(new Event('gs-catalogue-changed'))}catch(_){}return {total:merged.size,skipped};
 }
 function setupImportUI(){
   const grid=document.querySelector('#tab-einstellungen .grid');
