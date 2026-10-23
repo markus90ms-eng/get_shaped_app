@@ -196,5 +196,6 @@ $('importFile').onchange=async e=>{let file=e.target.files?.[0];if(!file)return;
 function shiftDay(i){let d=new Date(selected+'T12:00:00');d.setDate(d.getDate()+i);selected=datestr(d);render()};$('prevDay').onclick=()=>shiftDay(-1);$('nextDay').onclick=()=>shiftDay(1);$('date').onchange=e=>{if(e.target.value){selected=e.target.value;render()}};document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 initPresetDropdown();refreshRecent();render();if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
 </script>
+<script src="./nutrition.js"></script>
 </body>
 </html>
