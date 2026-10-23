@@ -3,7 +3,8 @@
 'use strict';
 const PRIVATE_CATALOGUE='get_shaped_private_catalogue_v1';
 const FILLER=new Set(['natur','bio','frisch','frische','frischer','gekochte','gekochter','gekocht','gegart','gegarte','gebraten','gebratene','roh','rohe','rohen','getrocknet','getrocknete','schwarz','schwarzer','fettarm','ungesusst','von','vom','der','die','das','den','dem','ein','eine','einen','etwas','ca','circa','etwa','mit','ohne','aus']);
-const norm=s=>String(s??'').toLocaleLowerCase('de').replace(/ß/g,'ss').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/ae/g,'a').replace(/oe/g,'o').replace(/ue/g,'u').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+const norm=s=>String(s??'').toLocaleLowerCase('de').replace(/ß/g,'ss').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/ae/g,'a').replace(/oe/g,'o').replace(/ue/g,'u').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ')
+  .replace(/\blife plus\b|\blifeplus\b/g,'lp').replace(/\btrip+le\b|\btripel\b/g,'triple');   // Schreibvarianten: „Life Plus“, „Tripple“
 const stem=w=>w.length>5?w.replace(/(en|er|n|e|s)$/,''):w;
 const tokens=s=>norm(s).split(' ').filter(Boolean);
 const num=x=>{if(x===null||x===undefined||String(x).trim()==='')return NaN;const n=Number(String(x).replace(',','.'));return Number.isFinite(n)?n:NaN};
@@ -71,7 +72,8 @@ function privateEntries(){
     const base=pick(x,'menge')>0?pick(x,'menge'):100;
     const q=perHundred(pick(x,'kcal'),pick(x,'protein_g','protein','p'),pick(x,'kohlenhydrate_g','carbs','c'),pick(x,'fett_g','fat','f'),base);
     const fib=pick(x,'ballaststoffe_g');
-    return {name:x.name,...q,fiber100:Number.isFinite(fib)?fib*100/base:undefined,virtualPiece:x.pro_stueck===true,piece:x.pro_stueck===true?100:(pick(x,'stueckgewicht_g')>0?pick(x,'stueckgewicht_g'):null),unit:String(x.einheit||'').toLowerCase()==='ml'?'ml':'g',aliases:[...new Set(names)],source:x.marke_oder_quelle||'Privater Katalog'};
+    const kw=(x.schluesselwoerter||[]).map(norm).flatMap(k=>k.split(' ')).filter(Boolean);
+    return {name:x.name,...q,kw,fiber100:Number.isFinite(fib)?fib*100/base:undefined,virtualPiece:x.pro_stueck===true,piece:x.pro_stueck===true?100:(pick(x,'stueckgewicht_g')>0?pick(x,'stueckgewicht_g'):null),unit:String(x.einheit||'').toLowerCase()==='ml'?'ml':'g',aliases:[...new Set(names)],source:x.marke_oder_quelle||'Privater Katalog'};
   });
 }
 function entries(){
@@ -144,6 +146,92 @@ function setupImportUI(){
   };
   refresh();
 }
-window.GSFoodIndex={match,norm,importCatalogue,entries,historyEntries};
+
+/* ---------- Intelligente Suche ---------- */
+const STOP=new Set(['mit','und','ein','eine','einen','einem','einer','von','vom','der','die','das','den','dem','bitte','ich','habe','hab','hatte','heute','gestern','mittag','abend','abends','morgens','zum','als','fruhstuck','mittagessen','abendessen','noch','auch','dazu','wasser','ca','circa','etwa','gegessen','getrunken','trinke','esse','in','aus','plus']);
+const QTY_WORDS={ein:1,eine:1,einen:1,einem:1,einer:1,zwei:2,drei:3,vier:4};
+// Beschreibt der ganze Satz ein einzelnes Produkt samt seiner Bestandteile („LP Shake mit Triple Protein und Daily“)?
+function phrase(text){
+  let raw=String(text||'').trim(),qty=null,unit='';
+  const m=raw.match(/^\s*(\d+(?:[.,]\d+)?)\s*(kg|gramm|gr|g|ml|liter|l|el|tl|stk\.?|stück|stueck|x)?\s+(.*)$/i);
+  if(m){qty=Number(m[1].replace(',','.'));unit=(m[2]||'').toLowerCase();raw=m[3]}
+  else{const w=raw.match(/^\s*(ein|eine|einen|einem|einer|zwei|drei|vier)\s+(.*)$/i);if(w){qty=QTY_WORDS[w[1].toLowerCase()];raw=w[2]}}
+  const R=norm(raw).split(' ').filter(Boolean);
+  if(!R.length)return null;
+  let best=null;
+  for(const e of entries()){
+    const kw=e.kw||[];
+    for(const aliasRaw of e.aliases||[]){
+      const A=norm(aliasRaw).split(' ').filter(Boolean);
+      if(!A.length)continue;
+      let dist=0,ok=true;const used=new Set();
+      for(const a of A){
+        let bd=Infinity,bi=-1;R.forEach((r,i)=>{const d=tokenDistance(r,a);if(d<bd){bd=d;bi=i}});
+        if(!Number.isFinite(bd)){ok=false;break}
+        dist+=bd;used.add(bi);
+      }
+      if(!ok)continue;
+      const extras=R.filter((_,i)=>!used.has(i));
+      const kwHit=extras.filter(x=>kw.some(k=>tokenDistance(x,k)<Infinity));
+      if(!extras.every(x=>STOP.has(x)||kwHit.includes(x)))continue;     // fremde Wörter -> es sind mehrere Lebensmittel
+      const score=A.join('').length*2-dist*3+kwHit.length*2;
+      if(!best||score>best.score||(score===best.score&&(e.tier??9)<(best.e.tier??9)))best={e,score,kwUsed:kwHit.length};
+    }
+  }
+  return best?{entry:{...best.e},qty,unit,kwUsed:best.kwUsed}:null;
+}
+function bigrams(s){const t='  '+s+' ',o=[];for(let i=0;i<t.length-2;i++)o.push(t.slice(i,i+3));return o}
+function dice(a,b){const A=bigrams(a),B=bigrams(b),used=new Array(B.length).fill(false);let hit=0;for(const x of A){const j=B.findIndex((y,i)=>!used[i]&&y===x);if(j>=0){used[j]=true;hit++}}return 2*hit/(A.length+B.length)}
+let usageCache=null,usageAt=0;
+function usage(){
+  if(usageCache&&Date.now()-usageAt<2000)return usageCache;
+  const c=new Map();let days={};try{days=db.days||{}}catch(_){}
+  for(const d of Object.values(days))for(const f of d.foods||[]){
+    const names=Array.isArray(f.components)&&f.components.length>1?f.components.map(x=>x.name):[f.name];
+    for(const n of names){const k=norm(n);if(k)c.set(k,(c.get(k)||0)+1)}
+  }
+  usageCache=c;usageAt=Date.now();return c;
+}
+// Ähnliche Lebensmittel zu einer (falsch geschriebenen oder unvollständigen) Eingabe, häufig Genutztes bevorzugt.
+function suggest(label,limit=5){
+  const key=norm(label);if(!key)return [];
+  const q=key.split(' ').filter(w=>w&&!FILLER.has(w)&&!STOP.has(w));
+  const qt=q.length?q:key.split(' '),qj=qt.join(' ');
+  const counts=usage(),byName=new Map();
+  for(const e of entries()){
+    if(e.meal)continue;
+    let best=0;
+    for(const aliasRaw of e.aliases||[]){
+      const al=norm(aliasRaw),A=al.split(' ').filter(Boolean);if(!A.length)continue;
+      const near=(t,a)=>tokenDistance(t,a)<Infinity||(t.length>=3&&a.startsWith(t))||(a.length>=4&&t.startsWith(a));
+      const cover=qt.filter(t=>A.some(a=>near(t,a))).length/qt.length;
+      const back=A.filter(a=>qt.some(t=>near(t,a))).length/A.length;
+      const s=cover*0.45+back*0.2+dice(qj,al)*0.35;
+      if(s>best)best=s;
+    }
+    best+=Math.min(0.15,(counts.get(norm(e.name))||0)*0.03);
+    if(best>=0.4){const k=norm(e.name),old=byName.get(k);if(!old||old.s<best)byName.set(k,{e,s:best})}
+  }
+  // Nahezu identische Einträge (gleiche Nährwerte) nur einmal anbieten.
+  const out=[],seen=new Set();
+  for(const x of [...byName.values()].sort((a,b)=>b.s-a.s)){
+    const sig=Math.round(x.e.kcal/3)+'|'+Math.round(x.e.p)+'|'+Math.round(x.e.f);
+    if(seen.has(sig))continue;seen.add(sig);out.push(x.e);if(out.length>=limit)break;
+  }
+  return out;
+}
+// Zuletzt verwendete Menge eines Lebensmittels (für „Menge nicht genannt“).
+function lastPortion(name){
+  const key=norm(name);let days={};try{days=db.days||{}}catch(_){}
+  for(const date of Object.keys(days).sort().reverse()){
+    const foods=[...(days[date].foods||[])].reverse();
+    for(const f of foods){
+      const comps=Array.isArray(f.components)&&f.components.length?f.components:[f];
+      for(const c of comps)if(norm(c.name)===key){const q=Number(c.quantity??c.qty);if(q>0)return {qty:q,unit:c.unit||'g'}}
+    }
+  }
+  return null;
+}
+window.GSFoodIndex={match,norm,importCatalogue,entries,historyEntries,phrase,suggest,lastPortion};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setupImportUI);else setupImportUI();
 })();

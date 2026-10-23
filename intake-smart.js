@@ -41,6 +41,7 @@ function setBreakdown(items,warning='') {
 }
 function standardize(text){
  let s=String(text||'').trim();
+ s=s.replace(/\blife\s*-?\s*plus\b/gi,'LP').replace(/\btrip+le\b|\btripel\b/gi,'Triple');
  s=s.replace(/\bkaffe\b/gi,'Kaffee').replace(/\bmichl\b/gi,'Milch').replace(/\bmich\b(?=\s+\d[,.]\d\s*(?:prozent|%))/gi,'Milch');
  // Erst den Fettgehalt als Eigenschaft der Milch anhängen, nicht als weitere Lebensmittelmenge verstehen.
  s=s.replace(/\b(milch)\s+mit\s+(\d+(?:[,.]\d+)?)\s*(?:prozent|%)\s*(?:fettgehalt|fettanteil|fett)?/gi,'$1 $2 %');
@@ -134,6 +135,26 @@ function unitInfo(count,unit,item){
  }
  return (mass>0&&mass<=10000)?{qty,unit:displayUnit,mass,assumption}:null;
 }
+// Baut einen Eintrag aus einem erkannten Lebensmittel; fehlt die Menge, wird sie sinnvoll angenommen (und kenntlich gemacht).
+function entryFromFood(food,amount,unit,label){
+ let assumed='';
+ if(!(amount>0)){
+   if(food.virtualPiece||food.piece){amount=1;unit='';assumed='1 Stück angenommen';}
+   else if(/kaffee|tee/i.test(food.name)){amount=1;unit='';}
+   else{
+     const lp=window.GSFoodIndex?.lastPortion?.(food.name);
+     if(lp&&lp.qty>0&&['g','ml'].includes(lp.unit)){amount=lp.qty;unit=lp.unit;assumed='Menge nicht genannt – wie zuletzt '+lp.qty+' '+lp.unit;}
+     else{unit=food.unit==='ml'?'ml':'g';amount=100;assumed='Menge nicht genannt – 100 '+unit+' angenommen';}
+   }
+ }
+ const q=unitInfo(amount,unit,food);
+ if(!q)return {error:'Die Einheit/Portionsgröße bei „'+String(label||food.name).trim()+'“ ist nicht eindeutig.',kind:'unit',label:String(label||food.name).trim()};
+ const ratio=q.mass/100;
+ return {entry:{name:food.name,qty:q.qty,unit:q.unit,grams:q.mass,
+   kcal:food.kcal*ratio,p:food.p*ratio,c:food.c*ratio,f:food.f*ratio,
+   assumption:[assumed,q.assumption].filter(Boolean).join('; '),assumed:!!assumed,
+   source:food.source||'lokale Referenztabelle'}};
+}
 function itemFromSegment(segment){
  let s=segment.trim().replace(/\s+(?:auch|noch|dazu|gegessen|getrunken)\s*[.!]?$/i,'').trim();
  s=s.replace(/^(einer|einem|einen|eine|ein|zwei|drei|vier|fünf|fuenf|sechs|sieben|acht|neun|zehn|halb|halbe|halben)\b/i,
@@ -143,26 +164,25 @@ function itemFromSegment(segment){
  if(fwd){label=fwd[3];amount=number(fwd[1]);unit=fwd[2]||'';}
  else if(back){label=back[1];amount=number(back[2]);unit=back[3];}
  else {
-   const plain=findFood(s);
-   if(plain&&/kaffee|tee/i.test(plain.name)){label=s;amount=1;unit='';}
-   else return {error:'Keine eindeutige Menge für „'+s+'“ (z. B. 20 g oder 100 ml).'};
+   // Keine Menge genannt: erkanntes Lebensmittel trotzdem verwenden (Menge wird angenommen), sonst Vorschläge statt Fehler.
+   const known=window.GSFoodIndex?.match(s)||findFood(s)||findLearnedProduct(s);
+   if(known)return entryFromFood(known,null,'',s);
+   return {error:'„'+s+'“ habe ich nicht eindeutig erkannt.',kind:'unknown',label:s,unknown:{label:s,amount:null,unit:''}};
  }
- const food=findFood(label)||window.GSFoodIndex?.match(label)||findLearnedProduct(label);
- if(!food)return {error:'Lebensmittel „'+label.trim()+'“ nicht erkannt. Ich suche nach dem Produkt.',unknown:{label:label.trim(),amount,unit}};
- const q=unitInfo(amount,unit,food);
- if(!q)return {error:'Die Einheit/Portionsgröße bei „'+label.trim()+'“ ist nicht eindeutig.'};
- const ratio=q.mass/100;
- return {entry:{name:food.name,qty:q.qty,unit:q.unit,grams:q.mass,
-   kcal:food.kcal*ratio,p:food.p*ratio,c:food.c*ratio,f:food.f*ratio,
-   assumption:q.assumption,source:food.source||'lokale Referenztabelle'}};
+ const food=window.GSFoodIndex?.match(label)||findFood(label)||findLearnedProduct(label);
+ if(!food)return {error:'Lebensmittel „'+label.trim()+'“ nicht erkannt. Ich suche nach dem Produkt.',kind:'unknown',label:label.trim(),unknown:{label:label.trim(),amount,unit}};
+ return entryFromFood(food,amount,unit,label);
 }
 function parseFreeText(text){
+ // Beschreibt der Satz ein einzelnes Produkt samt Bestandteilen („LP Shake mit Triple Protein und Daily“)? Dann nicht zerlegen.
+ const ph=window.GSFoodIndex?.phrase?.(cleanPrefix(text));
+ if(ph&&ph.kwUsed>0){const r=entryFromFood(ph.entry,ph.qty,ph.unit,ph.entry.name);if(r.entry)return {entries:[r.entry]};}
  const parts=splitFood(text);
  if(!parts.length)return {error:'Bitte ein Lebensmittel oder Gericht nennen.',entries:[]};
  let entries=[];
  for(const p of parts){
   const r=itemFromSegment(p);
-  if(r.error)return {error:r.error,entries,unknown:r.unknown||null};
+  if(r.error)return {error:r.error,entries,unknown:r.unknown||null,kind:r.kind||'',label:r.label||''};
   entries.push(r.entry);
  }
  return {entries};
@@ -324,9 +344,29 @@ function chooseProduct(index) {
  else show('Produkt gespeichert. Bitte Mahlzeit erneut auswerten.');
 }
 
+function renderSuggestions(html){
+ const box=$('gsSuggest');if(box)box.innerHTML=html||'';
+}
+function suggestionChips(p,content){
+ const label=p.label||p.unknown?.label||'';
+ if(!label||!window.GSFoodIndex?.suggest)return '';
+ const list=window.GSFoodIndex.suggest(label,5);
+ if(!list.length)return '';
+ return '<div class="hint" style="margin-top:8px"><strong>Meintest du …?</strong><div class="btnrow" style="margin-top:6px">'+
+  list.map(e=>'<button type="button" class="btn second small" data-suggest-name="'+escape(e.name)+'" data-suggest-label="'+escape(label)+'" style="flex:1 1 100%;text-align:left"><b>'+escape(e.name)+'</b> <span class="gs-meta">'+(e.virtualPiece?'1 Stück':'pro 100 '+(e.unit==='ml'?'ml':'g'))+' · '+Math.round(e.kcal)+' kcal</span></button>').join('')+
+  '</div></div>';
+}
+function applySuggestion(name,label){
+ const box=$('quickSpeech');let t=box.value;
+ const rx=new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i');
+ // Das Wort aus dem Text durch das gewählte Lebensmittel ersetzen; ist es nicht mehr auffindbar, wird es angehängt.
+ const plain=name.replace(/[,;]/g,' ').replace(/\s+/g,' ').trim();
+ t=rx.test(t)?t.replace(rx,()=>plain):(t?t+', ':'')+plain;
+ box.value=t;renderSuggestions('');analyze(t,false);
+}
 function analyze(text,allowSearch=true){
  const content=String(text||'').trim();
- if(!content){clearDraft();return false}
+ if(!content){clearDraft();renderSuggestions('');return false}
  const recovered=oldMeal(content);
  const p=recovered||parseFreeText(content);
  if(p.error){
@@ -334,6 +374,7 @@ function analyze(text,allowSearch=true){
   setBreakdown([],p.error);
   lastError=p.error;
   show(p.error+' Es wird keine unvollständige Kalorienzahl gespeichert.',true);
+  renderSuggestions(suggestionChips(p,content));
   if(p.unknown&&allowSearch){
     const lookup=()=>researchUnknown(p.unknown.label,content);
     if(!lookupBusy&&Date.now()-lastLookup>=6500)lookup();
@@ -341,7 +382,16 @@ function analyze(text,allowSearch=true){
   }
   return false;
  }
- lastError='';fillDraft(p.entries,content);return true;
+ lastError='';renderSuggestions('');fillDraft(p.entries,content);
+ const guessed=p.entries.filter(x=>x.assumed);
+ if(guessed.length){
+   show('Menge angenommen: '+guessed.map(x=>x.name+' – '+(x.assumption||'').split(';')[0]).join(' · ')+'. Bitte prüfen oder unten die Menge ändern.',true);
+   if(p.entries.length===1&&!(p.entries[0].unit==='Stück')){
+     const u=p.entries[0].unit;
+     renderSuggestions('<div class="hint" style="margin-top:8px"><strong>Menge wählen:</strong><div class="btnrow" style="margin-top:6px">'+[50,100,150,200,250,300].map(n=>'<button type="button" class="btn second small" data-set-qty="'+n+'">'+n+' '+u+'</button>').join('')+'</div></div>');
+   }
+ }
+ return true;
 }
 function applySaved(f,qty,unit){
  const original=gramsFromSaved(f);
@@ -391,6 +441,14 @@ function setup(){
  $('quickSpeech').closest('.field').appendChild(preview);
  const productLookup=document.createElement('div');productLookup.id='gsProductLookup';productLookup.setAttribute('aria-live','polite');
  $('quickSpeech').closest('.field').appendChild(productLookup);
+ const suggestBox=document.createElement('div');suggestBox.id='gsSuggest';suggestBox.setAttribute('aria-live','polite');
+ $('quickSpeech').closest('.field').appendChild(suggestBox);
+ suggestBox.addEventListener('click',e=>{
+   const sg=e.target.closest('[data-suggest-name]');
+   if(sg){applySuggestion(sg.dataset.suggestName,sg.dataset.suggestLabel);return}
+   const q=e.target.closest('[data-set-qty]');
+   if(q){$('foodGrams').value=q.dataset.setQty;$('foodGrams').dispatchEvent(new Event('input',{bubbles:true}));}
+ });
  productLookup.addEventListener('click',e=>{const el=e.target.closest('[data-choose-product]');if(el){chooseProduct(Number(el.dataset.chooseProduct));return}if(e.target.closest('[data-manual-product]')){manualForm(currentUnknown||'');return}if(e.target.closest('[data-manual-save]'))saveManual();});
  $('parseSpeech').onclick=()=>analyze($('quickSpeech').value);
  $('quickSpeech').addEventListener('input',()=>{

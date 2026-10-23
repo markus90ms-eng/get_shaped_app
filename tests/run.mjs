@@ -50,4 +50,10 @@ assert.equal(match('Testquark').kcal,70);
 for(const f of ['dairy-products.js'])vm.runInContext(fs.readFileSync(new URL('../'+f,import.meta.url),'utf8'),ctx);
 assert.equal(match('Tvorog 9 %').kcal,158);assert.equal(match('Tvorog').kcal,130);assert.equal(match('Tvorog 18 %').f,18);
 assert.equal(name('Geflügelnuggetz'),'Reinert Geflügel Nuggetz');
+// Intelligente Suche: Beschreibung eines Produkts samt Bestandteilen, Vorschläge bei Unklarem
+const ph=ctx.GSFoodIndex.phrase('Life Plus Shake mit Tripple Proteine und Daily');
+assert.equal(ph.entry.name,'LP Shake');assert.ok(ph.kwUsed>0);
+assert.equal(ctx.GSFoodIndex.phrase('Magerquark mit Daily'),null);          // fremdes Wort -> mehrere Lebensmittel
+assert.ok(ctx.GSFoodIndex.suggest('Quark Himbeer',5).some(e=>/quark/i.test(e.name)));
+assert.equal(ctx.GSFoodIndex.suggest('Quatschwort',5).length,0);
 console.log('App-Tests ok');
