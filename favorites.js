@@ -69,7 +69,7 @@ function setup(){
   const sel=$('preset');
   if(sel&&!$('gsFavFood')){
     const btn=document.createElement('button');btn.type='button';btn.id='gsFavFood';btn.className='btn ghost small';btn.style.marginTop='8px';
-    sel.insertAdjacentElement('afterend',btn);
+    ($('gsPresetBtn')||sel).insertAdjacentElement('afterend',btn);
     btn.onclick=toggleFood;
     sel.addEventListener('change',()=>setTimeout(updateStar,0));
     updateStar();

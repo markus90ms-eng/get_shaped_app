@@ -150,5 +150,5 @@ function setup(){
   document.querySelector('[data-tab="heute"]')?.addEventListener('click',()=>{try{refreshRecent()}catch(_){refreshAll()}});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(setup,0));else setTimeout(setup,0);
-window.GSPresets={rebuildPresets,rebuildActivities,buildList,selected:()=>active};
+window.GSPresets={rebuildPresets,rebuildActivities,buildList,selected:()=>active,item:i=>list[i]};
 })();

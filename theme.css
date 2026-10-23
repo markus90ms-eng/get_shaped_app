@@ -1,5 +1,6 @@
 /* Get Shaped – Dunkelmodus (Auto folgt dem System; Einstellungen: Hell/Dunkel erzwingen) */
 html[data-theme="dark"]{--bg:#121c18;--paper:#1b2824;--ink:#e4efe9;--muted:#9fb5aa;--green:#2d8a6e;--green2:#27403a;--lime:#4d6130;--border:#2c3d36;--amber:#d9a04f;--shadow:0 9px 30px #00000055;color-scheme:dark}
+html[data-theme="dark"] #gsPresetBtn{background:#15211d;border-color:#38503f}
 html[data-theme="dark"] body{background:var(--bg);color:var(--ink)}
 html[data-theme="dark"] input,html[data-theme="dark"] select,html[data-theme="dark"] textarea{background:#15211d;border-color:#38503f;color:var(--ink)}
 html[data-theme="dark"] ::placeholder{color:#74897f}
@@ -28,6 +29,7 @@ html[data-theme="dark"] .hero{background:linear-gradient(135deg,#0f2a24,#1a4a3c)
 html[data-theme="dark"] svg text{fill:var(--muted)}
 
 @media (prefers-color-scheme:dark){
+html:not([data-theme="light"]) #gsPresetBtn{background:#15211d;border-color:#38503f}
 html:not([data-theme="light"]){--bg:#121c18;--paper:#1b2824;--ink:#e4efe9;--muted:#9fb5aa;--green:#2d8a6e;--green2:#27403a;--lime:#4d6130;--border:#2c3d36;--amber:#d9a04f;--shadow:0 9px 30px #00000055;color-scheme:dark}
 html:not([data-theme="light"]) body{background:var(--bg);color:var(--ink)}
 html:not([data-theme="light"]) input,html:not([data-theme="light"]) select,html:not([data-theme="light"]) textarea{background:#15211d;border-color:#38503f;color:var(--ink)}
