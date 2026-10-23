@@ -329,6 +329,17 @@ function editExisting(f){
 }
 function setup(){
  if(!$('quickSpeech')||!$('foodGrams')||!foods.length)return;
+ // Ein einziges aktives Analysemodul – inklusive eigener Bedienoberfläche.
+ if(!$('nutCalculate')){
+   const form=document.createElement('div');form.id='gsAutoCalcControls';
+   form.innerHTML='<div class="btnrow" style="margin:8px 0"><button type="button" class="btn" id="nutCalculate">⚡ Mahlzeit berechnen</button><button type="button" class="btn second" id="gsSearchManually">🔎 Produkt recherchieren</button></div><div id="nutFeedback" class="hint hidden" role="status"></div>';
+   $('foodKcal').closest('.fieldrow').insertAdjacentElement('afterend',form);
+ }
+ if($('gsSearchManually'))$('gsSearchManually').onclick=()=>{
+   const query=String($('foodName').value||$('quickSpeech').value||'').trim();
+   if(!query){show('Bitte Lebensmittel oder Marke nennen.',true);return;}
+   researchUnknown(query,$('quickSpeech').value.trim(),true);
+ };
  // Ältere Parser greifen an dieselben Felder: die neue Eingabe übernimmt ihre Ereignisse.
  for(const id of ['foodGrams','foodName','foodUnit','recentMeals']){
   const old=$(id),clone=old.cloneNode(true);old.replaceWith(clone);
@@ -397,7 +408,13 @@ function setup(){
   if($('quickSpeech').value.trim())return analyze($('quickSpeech').value);
   show('Das Foto ist gespeichert. Für automatische Bilderkennung und Portionsermittlung fehlt noch ein sicherer Bildanalysedienst; aus einem einzelnen Bild sind Grammangaben nicht verlässlich. Du kannst das Foto im Chat teilen.',true);
  };
- $('speechHelp').textContent='Mahlzeit in einem Satz sprechen oder schreiben – die App zerlegt die einzelnen Lebensmittel automatisch und zeigt deren Kalorien. Beispiel: „Ein Kaffee mit 100 ml Milch mit 1,5 Prozent Fett und 20 g Datteln“.';
+ $('speechHelp').textContent='Freitext wird automatisch aufgeschlüsselt. Beispiel: „Einen Kaffee mit 100 ml Milch 1,5 % und 20 g Datteln“. Unbekannte Markenprodukte werden online gesucht; unklare Treffer musst du nur einmal zuordnen.';
+ const badge=$('gsBuildVersion');if(badge)badge.textContent='Get Shaped · Analyse-Version 18 · Online-Produktsuche verfügbar';
+ const update=$('gsForceUpdate');if(update)update.onclick=async()=>{
+   try{await navigator.serviceWorker?.getRegistration()?.then(reg=>reg?.update())}catch(_){}
+   const url=new URL(window.location.href);url.searchParams.set('appVersion','18');url.searchParams.set('refresh',String(Date.now()));
+   window.location.replace(url.toString());
+ };
 }
 window.GSMealParserV3={parseFreeText,standardize,splitFood,itemFromSegment,oldMeal,summarize,researchUnknown,offerScore};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);
