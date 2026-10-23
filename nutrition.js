@@ -274,6 +274,7 @@ function setup(){
   $n('speechHelp').textContent='Sage z. B. „200 g Hähnchenbrust und 150 g Zucchini“ oder „550 g von der Pfanne von gestern“. Bekannte Gerichte werden umgerechnet, neue Zutaten automatisch geschätzt.';
   // Keine Änderungen an privater Historie, Foto-Datenbank oder JSON-Backup.
 }
+window.GetShapedNutrition = {foods:dbItems.map(f=>({...f})),normalize:clean};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);
 else setup();
 })();
