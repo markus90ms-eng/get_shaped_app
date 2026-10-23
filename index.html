@@ -87,7 +87,13 @@
   <article class="card"><h2>💚 Bereits über dich bekannt</h2><p class="sub">Nach dem privaten Import findest du hier deine bisher dokumentierten Ziele, Routinen, Lebensmittel und Messwerte. Ohne Import werden hier keine persönlichen Angaben angezeigt.</p><div id="profileContent"></div></article>
   <article class="card"><h2>🥘 Deine gespeicherten Rezepte</h2><div id="recipeContent"></div></article>
   <article class="card"><h2>🍃 Vitalstoffroutine zur Information</h2><p class="sub">Von dir genannte Lifeplus-Routine; die persönliche Einnahme klärst du mit deinen Fachpersonen. Die App berechnet daraus keine vermeintlich gesicherte Nährstoffversorgung.</p><div id="supplementContent"></div></article>
-  <article class="card"><h2>🔄 Historische Daten nachladen</h2><p class="sub">Importiere deine persönliche JSON-Datei nur einmal. Achtung: Ein Import ersetzt die bisher lokal gespeicherten Tage. Vorher gegebenenfalls ein Backup erstellen.</p><button id="restoreHistory" class="btn second">Private Chat-Daten importieren</button></article>
+  <article class="card"><h2>🔐 Persönliches Profil wiederherstellen</h2>
+  <p class="sub">Falls deine Angaben fehlen: Lade deine private Profil-Sicherungsdatei hoch. Die App übernimmt ausschließlich Profil, Ziele, Gewohnheiten, Rezepte und Vitalstoffroutine. <strong>Mahlzeiten, Training, Maße und Fotos bleiben vollständig erhalten.</strong> Deine Datei wird nur im Browser gelesen und nicht an GitHub übertragen.</p>
+  <label class="btn second" for="profileRestoreFile" style="display:inline-block;cursor:pointer">↩ Profil aus privater JSON-Datei wiederherstellen</label>
+  <input type="file" id="profileRestoreFile" accept=".json,application/json" style="display:none"/>
+  <div id="profileRestoreStatus" class="sub" role="status" style="margin-top:12px"></div>
+</article>
+<article class="card"><h2>🔄 Historische Daten nachladen</h2><p class="sub">Importiere deine persönliche JSON-Datei nur einmal. Achtung: Ein Import ersetzt die bisher lokal gespeicherten Tage. Vorher gegebenenfalls ein Backup erstellen.</p><button id="restoreHistory" class="btn second">Private Chat-Daten importieren</button></article>
 </div></section>
 </main><footer class="foot">Wohlfühl-Tracker · Lokaler Prototyp · Keine Cloud-Synchronisation · Lebensmittel- und Aktivitätswerte sind Schätzungen.</footer>
 </div><div id="toast" class="toast hidden" role="status"></div>
@@ -189,6 +195,38 @@ $('startVoice').onclick=startDictation;$('parseSpeech').onclick=parseQuickSpeech
 $('preset').onchange=e=>{let p=presets[e.target.value];presetActive=e.target.value||null;if(!p)return;presetUnit=p.unit;$('foodName').value=p.name;$('foodGrams').value=p.unit;fillPreset()};function fillPreset(){let p=presets[presetActive];if(!p)return;let ratio=num($('foodGrams').value)/p.unit;for(let [id,key]of [['foodKcal','kcal'],['foodProtein','p'],['foodCarbs','c'],['foodFat','f']])$(id).value=r1(p[key]*ratio)}$('foodGrams').addEventListener('input',fillPreset);
 $('foodEntries').onclick=e=>{let ed=e.target.closest('[data-edit-food]');if(ed){let f=day().foods.find(x=>x.id===ed.dataset.editFood);if(!f)return;editingFoodID=f.id;presetActive=null;$('preset').value='';for(let [id,val]of [['foodName',f.name],['foodGrams',f.grams],['foodKcal',f.kcal],['foodProtein',f.p],['foodCarbs',f.c],['foodFat',f.f],['foodNote',f.note]])$(id).value=val||'';$('saveFood').textContent='Änderung speichern';$('mealCard').scrollIntoView({behavior:'smooth',block:'start'});return}let t=e.target.closest('[data-del-food]');if(!t)return;if(!confirm('Mahlzeit wirklich löschen?'))return;let d=day(),f=d.foods.find(x=>x.id===t.dataset.delFood);if(f){photoDelete(f.photo);photoDelete(f.photoSide)}d.foods=d.foods.filter(x=>x.id!==t.dataset.delFood);persist();refreshRecent();render()};$('activityEntries').onclick=e=>{let t=e.target.closest('[data-del-activity]');if(!t)return;if(!confirm('Eintrag löschen?'))return;day().activity=day().activity.filter(x=>x.id!==t.dataset.delActivity);persist();render()};
 $('saveMeasures').onclick=()=>{let d=day();d.measures={weight:$('weight').value,waist:$('waist').value,thigh:$('thigh').value,feel:$('feel').value.trim()};persist();render();toast('Tageswerte gespeichert ✓')};$('dayType').onchange=e=>{let d=day();d.dayType=e.target.value==='auto'?null:e.target.value;persist();render();toast('Tagesart gespeichert ✓')};$('saveSettings').onclick=()=>{let ranges={};for(let [type,prefix]of [['rest','Rest'],['moderate','Moderate'],['training','Training']]){let low=num($('set'+prefix+'Min').value),high=num($('set'+prefix+'Max').value);if(low<900||high>5000||low>high){toast('Kalorienbereiche prüfen: von ≤ bis');return}ranges[type]=[low,high]}settings={...settings,ranges,protein:num($('setProtein').value)||120,carbs:num($('setCarbs').value)||100};localStorage.setItem(CONFIG,JSON.stringify(settings));render();toast('Tagesbereiche gespeichert ✓')};$('saveToken').onclick=()=>{localStorage.setItem(TOK,$('accessToken').value);toast('Zugangscode lokal gespeichert')};
+// Sicherer Profil-Import: Niemals den Tagesverlauf, Maße, Trainings- oder Fotodaten ersetzen.
+$('profileRestoreFile').onchange=async e=>{
+  const input=e.target, f=input.files?.[0];if(!f)return;
+  const status=$('profileRestoreStatus');
+  try {
+    if(f.size>2000000)throw new Error('Die Datei ist zu groß (max. 2 MB).');
+    const doc=JSON.parse(await f.text());
+    const source=doc?.context||doc;
+    if(!source||typeof source!=='object'||Array.isArray(source)
+       ||(!source.profile&&!source.targets&&!source.habits&&!source.recipes&&!source.supplements))
+      throw new Error('Kein Get-Shaped-Profil erkannt.');
+    const current=(knowledge&&typeof knowledge==='object'&&!Array.isArray(knowledge))?knowledge:{};
+    function mergeMissing(dst,src){
+      if(Array.isArray(src))return Array.isArray(dst)&&dst.length?dst:src;
+      if(src&&typeof src==='object'){
+        let result=dst&&typeof dst==='object'&&!Array.isArray(dst)?{...dst}:{};
+        for(const [k,v] of Object.entries(src))result[k]=mergeMissing(result[k],v);
+        return result;
+      }
+      return dst===undefined||dst===null||dst===''?src:dst;
+    }
+    const restored={...current};
+    for(const key of ['profile','targets','habits','recipes','supplements'])
+      if(source[key]!==undefined)restored[key]=mergeMissing(current[key],source[key]);
+    localStorage.setItem(PRIVATE_CONTEXT,JSON.stringify(restored));
+    knowledge=restored;
+    renderKnowledge();
+    status.textContent='✓ Profil wiederhergestellt: persönliche Angaben, Ziele, Gewohnheiten, Rezepte und Ergänzungen. Bestehende Tages- und Fotodaten wurden nicht verändert.';
+    toast('Privates Profil wiederhergestellt ✓');
+  } catch(err){status.textContent='Profil konnte nicht übernommen werden: '+err.message;toast('Profil-Import fehlgeschlagen');}
+  finally{input.value=''}
+};
 $('restoreHistory').onclick=fillMissingHistory;
 $('copySummary').onclick=()=>copyText(summary());$('shareSummary').onclick=async()=>{if(navigator.share){try{await navigator.share({title:'Mein Tagesbericht',text:summary()})}catch(e){}}else copyText(summary())};async function exportWithPhotos(){let photos={};for(let d of Object.values(db.days||{})){for(let f of d.foods||[]){for(let id of [f.photo,f.photoSide])if(id&&!photos[id]){let photo=await photoGet(id);if(photo)photos[id]=photo}}}let data={version:2,days:db.days,settings,context:knowledge,photos,exportedAt:new Date().toISOString()};download('wohlfuehl-tracker-'+selected+'.json',JSON.stringify(data),'application/json');toast('Backup mit '+Object.keys(photos).length+' Foto(s) gesichert')}
 $('exportJSON').onclick=exportWithPhotos;$('exportCSV').onclick=csvExport;
