@@ -1,7 +1,7 @@
 /* Get Shaped – Schritte in Kalorien umrechnen (Spaziergang, Walkingpad / Laufband, Stepper).
-   Mit deiner Schrittlänge (Standard 60 cm) wird aus Schritten und – falls angegeben – Dauer die Gehgeschwindigkeit bestimmt;
-   daraus ergibt sich der Mehrverbrauch über Ruhe (MET-Werte nach Compendium of Physical Activities, gerundet).
-   Ohne Dauer wird sie aus der Schrittzahl und einer typischen Schrittfrequenz geschätzt. Alles bleibt eine grobe Schätzung. */
+   Einträge mit Dauer werden wie bisher berechnet. Trägst du NUR Schritte ein, wird die Dauer aus deiner eigenen Schrittfrequenz
+   (Median deiner Einträge mit Dauer und Schritten) bzw. einer Standardannahme geschätzt und dann wie jeder Eintrag mit Dauer gerechnet.
+   Die Schrittlänge dient nur der Anzeige der Strecke. Alles bleibt eine grobe Schätzung. */
 (() => {
 'use strict';
 const $=id=>document.getElementById(id);
@@ -9,19 +9,12 @@ const WALK_TYPES=['Spaziergang','Walkingpad / Laufband'];
 const STEP_TYPES=[...WALK_TYPES,'Stepper'];
 // Schritte pro Minute je Intensität (Annahme, wenn keine Dauer eingetragen ist)
 const CADENCE={walk:{Leicht:90,Moderat:110,Intensiv:125},stepper:{Leicht:90,Moderat:110,Intensiv:130}};   // echte Schritte pro Minute
-// MET über Gehgeschwindigkeit (km/h): Stützpunkte, dazwischen linear
-const SPEED_MET=[[2.5,2.3],[3.2,2.8],[4,3.0],[4.8,3.5],[5.6,4.3],[6.4,5.0],[7.2,7.0],[8.5,8.5]];
 try{METS['Walkingpad / Laufband']=[2.8,3.8,6.0]}catch(_){}
 
 const stepLen=()=>{const v=Number(settings?.stepLengthCm);return v>=30&&v<=120?v:60};
 // Viele Stepper zählen nur jeden zweiten Schritt (links + rechts = 1). Standard: ja, abschaltbar.
 const stepperFactor=()=>settings?.stepperCountsHalf===false?1:2;
 const intensityOf=a=>['Leicht','Moderat','Intensiv'].includes(a.intensity)?a.intensity:'Moderat';
-function metFromSpeed(v){
-  const t=SPEED_MET;if(v<=t[0][0])return t[0][1];if(v>=t[t.length-1][0])return t[t.length-1][1];
-  for(let i=1;i<t.length;i++)if(v<=t[i][0]){const [x0,y0]=t[i-1],[x1,y1]=t[i];return y0+(y1-y0)*(v-x0)/(x1-x0)}
-  return 3.5;
-}
 // Eigene Schrittfrequenz aus bisherigen Einträgen mit Dauer UND Schritten (Median, mindestens 3 Einträge).
 function personalCadence(type){
   const v=[];let days={};try{days=db.days||{}}catch(_){}
@@ -34,28 +27,23 @@ function personalCadence(type){
   v.sort((x,y)=>x-y);const mid=Math.floor(v.length/2);
   return {cad:v.length%2?v[mid]:(v[mid-1]+v[mid])/2,n:v.length};
 }
-// Ergebnis {mins, met, km, speed, estimated, steps(real), source} oder null, wenn die normale Berechnung gelten soll.
+// Nur für Einträge OHNE Dauer: Dauer = Schritte ÷ Schrittfrequenz, Verbrauch dann wie bei jedem Eintrag mit Dauer (MET nach Intensität).
+// Einträge mit Dauer (auch mit Schritten) bleiben unverändert (normale Berechnung).
 function derive(a){
   const type=String(a?.type||'').trim();
   if(!STEP_TYPES.includes(type))return null;
   const steps=Number(a.steps),mins=Number(a.mins);
-  if(!(steps>0)||steps>100000)return null;
-  const int=intensityOf(a),personal=personalCadence(type);
+  if(!(steps>0)||steps>100000||mins>0)return null;
+  const int=intensityOf(a),personal=personalCadence(type),idx={Leicht:0,Moderat:1,Intensiv:2}[int];
+  const source=personal?'deinen bisherigen Einträgen ('+personal.n+')':'Standardannahme';
+  const met=(METS[type]||METS.Sonstiges)[idx];
   if(WALK_TYPES.includes(type)){
-    const km=steps*stepLen()/100000;                                  // Schritte × cm → km
-    if(mins>0){
-      const speed=km/(mins/60);
-      if(speed<1.5||speed>9)return null;
-      return {mins,met:metFromSpeed(speed),km,speed,estimated:false,steps};
-    }
-    const def=CADENCE.walk,cad=personal?personal.cad*def[int]/def.Moderat:def[int],m=steps/cad,speed=km/(m/60);
-    return {mins:m,met:metFromSpeed(speed),km,speed,estimated:true,steps,source:personal?'deinen bisherigen Einträgen ('+personal.n+')':'Standardannahme'};
+    const def=CADENCE.walk,cad=personal?personal.cad*def[int]/def.Moderat:def[int];
+    return {mins:steps/cad,met,km:steps*stepLen()/100000,estimated:true,steps,source};
   }
-  if(mins>0)return null;                                            // Stepper mit Dauer: normale Berechnung über Intensität
-  const levels=METS['Stepper'],idx={Leicht:0,Moderat:1,Intensiv:2}[int],def=CADENCE.stepper;
-  // Frequenz in GEZÄHLTEN Schritten pro Minute: eigene Einträge, sonst typische echte Frequenz geteilt durch den Zählfaktor.
-  const counted=personal?personal.cad*def[int]/def.Moderat:def[int]/stepperFactor();
-  return {mins:steps/counted,met:levels[idx],km:0,speed:null,estimated:true,steps:steps*stepperFactor(),source:personal?'deinen bisherigen Einträgen ('+personal.n+')':'Standardannahme'};
+  // Stepper: Frequenz in GEZÄHLTEN Schritten pro Minute: eigene Einträge, sonst typische echte Frequenz geteilt durch den Zählfaktor.
+  const def=CADENCE.stepper,counted=personal?personal.cad*def[int]/def.Moderat:def[int]/stepperFactor();
+  return {mins:steps/counted,met,km:0,estimated:true,steps:steps*stepperFactor(),source};
 }
 const baseBurn=window.activityBurn;
 window.activityBurn=function(a,weight){
@@ -79,14 +67,16 @@ function decorate(){
   const list=[...(day().activity||[])].reverse();
   host.querySelectorAll('.entry').forEach((el,i)=>{
     const a=list[i];if(!a||el.querySelector('.gs-stepinfo'))return;
-    const d=derive(a);if(!d)return;
     const detail=el.querySelector('.entry-detail');if(!detail)return;
-    const info=document.createElement('div');info.className='gs-stepinfo';info.style.marginTop='4px';
+    const d=derive(a),steps=Number(a.steps);
+    let text='';
     if(a.type==='Stepper'){
-      info.textContent=(stepperFactor()===2?'gezählt '+Math.round(a.steps).toLocaleString('de-DE')+' ≈ '+Math.round(d.steps).toLocaleString('de-DE')+' echte Schritte · ':'')+'ca. '+Math.round(d.mins)+' Min. geschätzt'+(d.source?' (nach '+d.source+')':'');
-      detail.appendChild(info);return;
+      if(d)text=(stepperFactor()===2?'gezählt '+Math.round(steps).toLocaleString('de-DE')+' ≈ '+Math.round(d.steps).toLocaleString('de-DE')+' echte Schritte · ':'')+'ca. '+Math.round(d.mins)+' Min. geschätzt (nach '+d.source+')';
+    }else if(WALK_TYPES.includes(a.type)&&steps>0){
+      text='≈ '+fmt1(steps*stepLen()/100000)+' km bei '+stepLen()+' cm Schrittlänge'+(d?' · ca. '+Math.round(d.mins)+' Min. geschätzt (nach '+d.source+')':'');
     }
-    info.textContent='≈ '+fmt1(d.km)+' km bei '+stepLen()+' cm Schrittlänge'+(d.estimated?' · ca. '+Math.round(d.mins)+' Min. geschätzt'+(d.speed?' ('+fmt1(d.speed)+' km/h'+(d.source?', nach '+d.source:'')+')':''):' · '+fmt1(d.speed)+' km/h');
+    if(!text)return;
+    const info=document.createElement('div');info.className='gs-stepinfo';info.style.marginTop='4px';info.textContent=text;
     detail.appendChild(info);
   });
 }
@@ -103,12 +93,12 @@ function renderStats(){
 function setup(){
   // Hinweistext zur Bewegung anpassen
   document.querySelectorAll('#tab-heute .sub').forEach(p=>{
-    if(/Schrittzahlen ohne Zeit/.test(p.textContent))p.textContent='Dauer ODER Schritte genügen: Bei Spaziergang, Walkingpad / Laufband und Stepper rechne ich Schritte mit deiner Schrittlänge in verbrannte kcal um (grobe Schätzung). Mit Dauer und Schritten wird die Gehgeschwindigkeit berücksichtigt.';
+    if(/Schrittzahlen ohne Zeit/.test(p.textContent))p.textContent='Dauer ODER Schritte genügen: Einträge mit Dauer rechne ich wie bisher. Trägst du bei Spaziergang, Walkingpad / Laufband oder Stepper nur Schritte ein, schätze ich die Dauer aus deiner üblichen Schrittfrequenz und berechne daraus die verbrannten kcal (grobe Schätzung).';
   });
   const grid=document.querySelector('#tab-einstellungen .grid');
   if(grid&&!$('gsStepCard')){
     const card=document.createElement('article');card.className='card';card.id='gsStepCard';
-    card.innerHTML='<h2>👣 Schritte & Stepper</h2><p class="sub">Damit werden Schritte in Strecke und verbrannte Kalorien umgerechnet.</p>'+
+    card.innerHTML='<h2>👣 Schritte & Stepper</h2><p class="sub">Die Schrittlänge dient der Streckenanzeige. Die Kalorien rechne ich aus Dauer und Intensität; bei reinen Schrittzahlen aus der geschätzten Dauer.</p>'+
       '<div class="field"><label class="label" for="gsStepLen">Schrittlänge (cm)</label><input id="gsStepLen" type="number" inputmode="numeric" min="30" max="120" step="1"/></div>'+
       '<div id="gsStepHint" class="hint" style="margin-bottom:10px"></div>'+
       '<div class="fieldrow"><div class="field"><label class="label" for="gsCalKm">Bekannte Strecke (km)</label><input id="gsCalKm" type="number" inputmode="decimal" step="any" placeholder="z. B. 3,2"/></div><div class="field"><label class="label" for="gsCalSteps">Dafür gezählte Schritte</label><input id="gsCalSteps" type="number" inputmode="numeric" placeholder="z. B. 5000"/></div></div>'+
@@ -140,6 +130,6 @@ function setup(){
   }
   try{render()}catch(_){}
 }
-window.GSSteps={derive,stepLen,metFromSpeed};
+window.GSSteps={derive,stepLen};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(setup,240));else setTimeout(setup,240);
 })();
