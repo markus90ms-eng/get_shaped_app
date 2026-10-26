@@ -208,13 +208,13 @@ function usage(){
   usageCache=c;usageAt=Date.now();return c;
 }
 // Ähnliche Lebensmittel zu einer (falsch geschriebenen oder unvollständigen) Eingabe, häufig Genutztes bevorzugt.
-function suggest(label,limit=5){
+function suggest(label,limit=5,opts={}){
   const key=norm(label);if(!key)return [];
   const q=key.split(' ').filter(w=>w&&!FILLER.has(w)&&!STOP.has(w));
   const qt=q.length?q:key.split(' '),qj=qt.join(' ');
   const counts=usage(),byName=new Map();
   for(const e of entries()){
-    if(e.meal)continue;
+    if(e.meal||(opts.noDishes&&e.estimate))continue;
     let best=0;
     for(const aliasRaw of e.aliases||[]){
       const al=norm(aliasRaw),A=al.split(' ').filter(Boolean);if(!A.length)continue;
@@ -224,7 +224,7 @@ function suggest(label,limit=5){
       const s=cover*0.45+back*0.2+dice(qj,al)*0.35;
       if(s>best)best=s;
     }
-    best+=Math.min(0.15,(counts.get(norm(e.name))||0)*0.03)+((e.tier??9)<=1?0.08:0);   // eigene Produktliste bevorzugen
+    best+=Math.min(0.15,(counts.get(norm(e.name))||0)*0.03)+((e.tier??9)<=1?0.08:0)-(e.estimate?0.1:0);   // eigene Produktliste bevorzugen, fertige Gerichte nachrangig
     if(best>=0.4){const k=norm(e.name),old=byName.get(k);if(!old||old.s<best)byName.set(k,{e,s:best})}
   }
   // Nahezu identische Einträge (gleiche Nährwerte) nur einmal anbieten.

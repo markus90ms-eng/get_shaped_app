@@ -1,19 +1,33 @@
 /* Get Shaped – Eigene Rezepte (Kuchen, Chili con Carne …): Zutaten des ganzen Rezepts + Gewicht des fertigen Gerichts
    ergeben Nährwerte pro 100 g. Gegessen wird dann nur noch die Menge des fertigen Gerichts ("250 g Chili con Carne").
-   Rezepte liegen in den Einstellungen und damit im JSON-Backup. */
+   Unbekannte Zutaten werden automatisch gesucht (eigene Liste, Richtwerte, Open Food Facts) und zur Auswahl angeboten.
+   Die Eingabe bleibt als Entwurf erhalten, auch wenn die App kurz verlassen wird; gelöscht wird sie nur mit „Abbrechen“ oder nach dem Speichern. */
 (() => {
 'use strict';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const r1=x=>Math.round(x*10)/10;
-let editingId=null,parsed=null,pendingUnknown=null;
+const DRAFT='get_shaped_recipe_draft';
+let editingId=null,parsed=null,unknowns=[],calcToken=0;
 
 function recipes(){settings.recipes=settings.recipes||[];return settings.recipes}
 function saveSettings(){try{localStorage.setItem(CONFIG,JSON.stringify(settings))}catch(_){}}
-function parseIngredients(text){
-  const t=String(text||'').replace(/\([^)]*\)/g,' ').split(/\n+/).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean).join(', ');
-  if(!t)return {error:'Bitte die Zutaten mit Mengen eintragen.',entries:[]};
-  return window.GSMealParserV3.parseFreeText(t);
+const P=()=>window.GSMealParserV3;
+
+/* ---------- Entwurf ---------- */
+function readDraft(){try{return JSON.parse(localStorage.getItem(DRAFT)||'null')}catch(_){return null}}
+function writeDraft(extra={}){
+  if(!$('gsRecipe'))return;
+  const d={editingId,name:$('gsRecipeName').value,aliases:$('gsRecipeAliases').value,ing:$('gsRecipeIng').value,weight:$('gsRecipeWeight').value,portions:$('gsRecipePortions').value,
+    open:$('gsRecipe').style.display==='flex',...extra};
+  const empty=!d.name&&!d.ing&&!d.weight&&!d.portions&&!d.aliases;
+  try{if(empty)localStorage.removeItem(DRAFT);else localStorage.setItem(DRAFT,JSON.stringify(d))}catch(_){}
+}
+function clearDraft(){try{localStorage.removeItem(DRAFT)}catch(_){}}
+
+/* ---------- Berechnung ---------- */
+function ingredientLines(text){
+  return String(text||'').replace(/\([^)]*\)/g,' ').split(/\n+/).map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean);
 }
 function totals(entries){
   const t={kcal:0,p:0,c:0,f:0,grams:0};
@@ -30,61 +44,140 @@ function injectStyle(){
    '#gsRecipe .gs-sheet{background:var(--paper);width:100%;max-width:600px;max-height:92vh;border-radius:22px 22px 0 0;display:flex;flex-direction:column;overflow:hidden}'+
    '#gsRecipe .gs-body{overflow:auto;padding:14px 16px 28px;-webkit-overflow-scrolling:touch}'+
    '#gsRecipe .gs-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)}#gsRecipe h2{margin:0;font-size:18px}'+
-   '.gs-rline{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}.gs-rline:last-child{border:0}';
+   '.gs-rline{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}.gs-rline:last-child{border:0}'+
+   '.gs-unk{margin:10px 0;padding:10px 12px;border-radius:14px;background:var(--green2)}.gs-unk label.opt{display:flex;gap:8px;align-items:flex-start;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border)}.gs-unk label.opt:last-of-type{border:0}.gs-unk input[type=radio]{width:auto;margin-top:3px}'+
+   '.gs-unk .triple input{padding:8px}';
   document.head.appendChild(s);
 }
 function ensureModal(){
   let el=$('gsRecipe');if(el)return el;
   injectStyle();
   el=document.createElement('div');el.id='gsRecipe';
-  el.innerHTML='<div class="gs-sheet" role="dialog" aria-label="Rezept"><div class="gs-head"><h2 id="gsRecipeTitle">🍲 Rezept anlegen</h2><button type="button" class="btn small second" id="gsRecipeClose">Schließen</button></div>'+
+  el.innerHTML='<div class="gs-sheet" role="dialog" aria-label="Rezept"><div class="gs-head"><h2 id="gsRecipeTitle">🍲 Rezept anlegen</h2><button type="button" class="btn small second" id="gsRecipeClose" title="Eingabe bleibt als Entwurf erhalten">Schließen</button></div>'+
    '<div class="gs-body">'+
    '<div class="field"><label class="label" for="gsRecipeName">Name des Gerichts</label><input id="gsRecipeName" placeholder="z. B. Chili con Carne oder Apfelkuchen"/></div>'+
    '<div class="field"><label class="label" for="gsRecipeAliases">Auch erkennen als (optional, mit Komma getrennt)</label><input id="gsRecipeAliases" placeholder="z. B. Chili, Hackchili"/></div>'+
-   '<div class="field"><label class="label" for="gsRecipeIng">Zutaten des ganzen Rezepts (eine pro Zeile, mit Mengen)</label><textarea id="gsRecipeIng" rows="7" placeholder="500 g Rinderhack\\n2 Zwiebeln\\n400 g Tomaten\\n200 g Kidneybohnen\\n1 EL Olivenöl"></textarea></div>'+
+   '<div class="field"><label class="label" for="gsRecipeIng">Zutaten des ganzen Rezepts (eine pro Zeile, mit Mengen)</label><textarea id="gsRecipeIng" rows="7" placeholder="500 g Rinderhack\n2 Zwiebeln\n400 g Tomaten\n200 g Kidneybohnen\n1 EL Olivenöl"></textarea></div>'+
    '<div class="fieldrow"><div class="field"><label class="label" for="gsRecipeWeight">Gewicht fertig (g)</label><input id="gsRecipeWeight" type="number" inputmode="decimal" min="1" step="any" placeholder="gewogen, ohne Topf"/></div><div class="field"><label class="label" for="gsRecipePortions">Portionen (optional)</label><input id="gsRecipePortions" type="number" inputmode="numeric" min="1" step="1" placeholder="z. B. 4"/></div></div>'+
-   '<p class="sub" style="margin-top:-4px">Beim Kochen verdampft Wasser: Wiege das fertige Gericht (Kuchen nach dem Backen, Eintopf ohne Topf). Ohne Angabe nehme ich die Summe der Zutaten.</p>'+
+   '<p class="sub" style="margin-top:-4px">Beim Kochen verdampft Wasser: Wiege das fertige Gericht (Kuchen nach dem Backen, Eintopf ohne Topf). Ohne Angabe nehme ich die Summe der Zutaten. Die Nährwerte der Zutaten suche ich selbst.</p>'+
    '<button type="button" class="btn second" id="gsRecipeCalc" style="width:100%">Berechnen</button>'+
-   '<div id="gsRecipeResult" style="margin-top:12px"></div></div></div>';
+   '<div id="gsRecipeResult" style="margin-top:12px"></div>'+
+   '<button type="button" class="btn ghost" id="gsRecipeCancel" style="width:100%;margin-top:14px">✕ Abbrechen und Eingabe verwerfen</button></div></div>';
   document.body.appendChild(el);
-  $('gsRecipeClose').onclick=close;
-  el.addEventListener('click',e=>{if(e.target===el)close()});
+  $('gsRecipeClose').onclick=()=>{writeDraft({open:false});hide()};
+  $('gsRecipeCancel').onclick=()=>{
+    const d=readDraft();
+    if((d||$('gsRecipeName').value||$('gsRecipeIng').value)&&!confirm('Eingabe wirklich verwerfen?'))return;
+    clearDraft();hide();
+  };
+  el.addEventListener('click',e=>{if(e.target===el){writeDraft({open:false});hide()}});
   $('gsRecipeCalc').onclick=calculate;
   $('gsRecipeResult').addEventListener('click',onResultClick);
+  for(const id of ['gsRecipeName','gsRecipeAliases','gsRecipeIng','gsRecipeWeight','gsRecipePortions'])$(id).addEventListener('input',()=>writeDraft());
+  // Beim Wechsel in eine andere App/einen anderen Tab den Entwurf sofort sichern.
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)writeDraft()});
+  window.addEventListener('pagehide',()=>writeDraft());
   return el;
 }
-function open(recipe){
-  const el=ensureModal();
-  editingId=recipe?.id||null;parsed=null;pendingUnknown=null;
-  $('gsRecipeTitle').textContent=recipe?'🍲 Rezept bearbeiten':'🍲 Rezept anlegen';
-  $('gsRecipeName').value=recipe?.name||'';$('gsRecipeAliases').value=(recipe?.aliases||[]).join(', ');$('gsRecipeIng').value=recipe?.ingredientsText||'';
-  $('gsRecipeWeight').value=recipe?.totalGrams||'';$('gsRecipePortions').value=recipe?.portions||'';
-  $('gsRecipeResult').innerHTML='';
-  el.style.display='flex';document.body.style.overflow='hidden';
-  if(recipe)calculate();
+function show(){const el=ensureModal();el.style.display='flex';document.body.style.overflow='hidden'}
+function hide(){const el=$('gsRecipe');if(el)el.style.display='none';document.body.style.overflow=''}
+function fill(v){
+  $('gsRecipeTitle').textContent=v.editingId?'🍲 Rezept bearbeiten':'🍲 Rezept anlegen';
+  $('gsRecipeName').value=v.name||'';$('gsRecipeAliases').value=v.aliases||'';$('gsRecipeIng').value=v.ing||'';
+  $('gsRecipeWeight').value=v.weight||'';$('gsRecipePortions').value=v.portions||'';
+  $('gsRecipeResult').innerHTML='';parsed=null;unknowns=[];
 }
-function close(){const el=$('gsRecipe');if(el)el.style.display='none';document.body.style.overflow=''}
+function open(recipe){
+  ensureModal();
+  const draft=readDraft();
+  if(recipe){
+    editingId=recipe.id;
+    // Ein offener Entwurf zum selben Rezept hat Vorrang vor dem gespeicherten Stand.
+    fill(draft&&draft.editingId===recipe.id?draft:{editingId:recipe.id,name:recipe.name,aliases:(recipe.aliases||[]).join(', '),ing:recipe.ingredientsText,weight:recipe.totalGrams,portions:recipe.portions});
+  }else if(draft&&!draft.editingId){
+    editingId=null;fill(draft);
+    toast('Entwurf fortgesetzt');
+  }else{editingId=null;fill({})}
+  show();writeDraft({open:true});
+  if($('gsRecipeIng').value.trim())calculate();
+}
 
-function calculate(){
-  const out=$('gsRecipeResult'),res=parseIngredients($('gsRecipeIng').value);
-  pendingUnknown=null;parsed=null;
-  if(res.error){
-    if(res.kind==='unknown'&&res.label){
-      pendingUnknown=res.label;
-      const sug=window.GSFoodIndex.suggest(res.label,4);
-      out.innerHTML='<div class="warnline">„'+esc(res.label)+'“ kenne ich noch nicht.</div>'+
-       (sug.length?'<div class="hint" style="margin-top:8px"><strong>Meintest du …?</strong><div class="btnrow" style="margin-top:6px">'+sug.map(e=>'<button type="button" class="btn second small" style="flex:1 1 100%;text-align:left" data-r-sug="'+esc(e.name)+'"><b>'+esc(e.name)+'</b> <span class="gs-meta">pro 100 '+(e.unit==='ml'?'ml':'g')+': '+Math.round(e.kcal)+' kcal</span></button>').join('')+'</div></div>':'')+
-       '<div class="hint" style="margin-top:8px"><strong>Oder Werte pro 100 g selbst eintragen</strong><div class="triple" style="margin-top:6px"><div class="field"><label class="label" for="rK">kcal</label><input id="rK" type="number" inputmode="decimal" step="any"/></div><div class="field"><label class="label" for="rP">Eiweiß</label><input id="rP" type="number" inputmode="decimal" step="any"/></div><div class="field"><label class="label" for="rC">KH</label><input id="rC" type="number" inputmode="decimal" step="any"/></div></div><div class="field"><label class="label" for="rF">Fett</label><input id="rF" type="number" inputmode="decimal" step="any"/></div><button type="button" class="btn small" data-r-manual="1" style="width:100%">Speichern und weiter</button></div>';
-    }else out.innerHTML='<div class="warnline">'+esc(res.error)+'</div>';
+async function calculate(){
+  const out=$('gsRecipeResult'),lines=ingredientLines($('gsRecipeIng').value),token=++calcToken;
+  parsed=null;unknowns=[];
+  if(!lines.length){out.innerHTML='<div class="warnline">Bitte die Zutaten mit Mengen eintragen.</div>';return}
+  const rows=lines.map(line=>({line,res:P().parseFreeText(line)}));
+  const bad=rows.filter(r=>r.res.error);
+  if(bad.length){
+    const unk=bad.filter(r=>r.res.kind==='unknown'&&r.res.label);
+    const other=bad.filter(r=>!(r.res.kind==='unknown'&&r.res.label));
+    unknowns=unk.map(r=>({line:r.line,label:r.res.label,sug:window.GSFoodIndex.suggest(r.res.label,3,{noDishes:true}),online:null,onlineError:'',pick:'',manual:false}));
+    renderUnknowns(other.map(r=>r.res.error));
+    // Online-Recherche für alle unbekannten Zutaten, nacheinander; Anzeige aktualisiert sich laufend.
+    for(const u of unknowns){
+      try{u.online=(await P().fetchCandidates(u.label)).slice(0,4)}catch(e){u.online=[];u.onlineError=e.name==='AbortError'?'Zeitüberschreitung':e.message}
+      if(token!==calcToken)return;
+      renderUnknowns(other.map(r=>r.res.error));
+    }
     return;
   }
-  const missing=res.entries.filter(e=>e.assumed);
+  const entries=rows.flatMap(r=>r.res.entries);
+  const missing=entries.filter(e=>e.assumed);
   if(missing.length){out.innerHTML='<div class="warnline">Bei diesen Zutaten fehlt die Menge: '+missing.map(e=>esc(e.name)).join(', ')+'. Bitte in der Zeile ergänzen (z. B. „200 g …“).</div>';return}
-  const t=totals(res.entries),finished=Number($('gsRecipeWeight').value)>0?Number($('gsRecipeWeight').value):Math.round(t.grams);
+  showResult(entries);
+}
+function renderUnknowns(otherErrors=[]){
+  const out=$('gsRecipeResult');
+  const optLabel=(e)=>esc(e.name)+' <span class="gs-meta">pro 100 '+(e.unit==='ml'?'ml':'g')+': '+Math.round(e.kcal)+' kcal · '+r1(e.p)+' g E · '+r1(e.c)+' g KH · '+r1(e.f)+' g F</span>';
+  out.innerHTML=(otherErrors.length?'<div class="warnline">'+otherErrors.map(esc).join('<br>')+'</div>':'')+
+    '<p class="sub"><b>Diese Zutaten habe ich noch nicht in deiner Liste.</b> Ich habe passende Einträge gesucht – wähle aus, dann rechne ich weiter.</p>'+
+    unknowns.map((u,i)=>{
+      const nl=window.GSFoodIndex.norm(u.label),like=n=>{const x=window.GSFoodIndex.norm(n);return x.includes(nl)||nl.includes(x)};
+      // Vorauswahl: Treffer, dessen Name zur Zutat passt (eigene Liste vor Netz); sonst erster Netz-Treffer; sonst erster Richtwert.
+      let first='m';
+      const sIdx=u.sug.findIndex(e=>like(e.name)),oIdx=(u.online||[]).findIndex(e=>like(e.name));
+      if(sIdx>=0)first='s'+sIdx;else if(oIdx>=0)first='o'+oIdx;else if(u.online&&u.online.length)first='o0';else if(u.sug.length)first='s0';
+      const pick=u.pick||first;
+      return '<div class="gs-unk" data-unk="'+i+'"><strong>„'+esc(u.label)+'“</strong> <span class="gs-meta">(Zeile: '+esc(u.line)+')</span>'+
+       u.sug.map((e,k)=>'<label class="opt"><input type="radio" name="gsU'+i+'" value="s'+k+'"'+(pick==='s'+k?' checked':'')+'/> <span>'+optLabel(e)+' <span class="gs-meta">· '+(e.generic||e.estimate?'Richtwert':'eigene Liste')+'</span></span></label>').join('')+
+       (u.online===null?'<p class="sub">🔎 Suche im Netz …</p>':(u.online.map((e,k)=>'<label class="opt"><input type="radio" name="gsU'+i+'" value="o'+k+'"'+(pick==='o'+k?' checked':'')+'/> <span><b>'+esc(e.name)+'</b>'+(e.brand?' · '+esc(e.brand):'')+' <span class="gs-meta">pro 100 g: '+Math.round(e.kcal)+' kcal · '+r1(e.p)+' g E · '+r1(e.c)+' g KH · '+r1(e.f)+' g F · Open Food Facts</span></span></label>').join('')+(u.online.length?'':'<p class="sub">Im Netz nichts Passendes gefunden'+(u.onlineError?' ('+esc(u.onlineError)+')':'')+'.</p>')))+
+       '<label class="opt"><input type="radio" name="gsU'+i+'" value="m"'+(pick==='m'?' checked':'')+'/> <span>Werte selbst eintragen</span></label>'+
+       '<div class="triple" data-manual="'+i+'" style="'+(pick==='m'?'':'display:none;')+'margin-top:6px"><div class="field"><input data-m="k" type="number" inputmode="decimal" step="any" placeholder="kcal"/></div><div class="field"><input data-m="p" type="number" inputmode="decimal" step="any" placeholder="Eiweiß"/></div><div class="field"><input data-m="c" type="number" inputmode="decimal" step="any" placeholder="KH"/></div></div>'+
+       '<div class="field" data-manual-f="'+i+'" style="'+(pick==='m'?'':'display:none;')+'"><input data-m="f" type="number" inputmode="decimal" step="any" placeholder="Fett (pro 100 g)"/></div></div>';
+    }).join('')+
+    '<button type="button" class="btn" data-r-apply="1" style="width:100%">Auswahl übernehmen und berechnen</button>';
+}
+function applyUnknowns(){
+  const out=$('gsRecipeResult');
+  let ta=$('gsRecipeIng').value;
+  for(let i=0;i<unknowns.length;i++){
+    const u=unknowns[i],block=out.querySelector('[data-unk="'+i+'"]');
+    const val=block.querySelector('input[type=radio]:checked')?.value||'';
+    if(!val){toast('Bitte für „'+u.label+'“ eine Auswahl treffen.');return}
+    const rx=new RegExp(u.label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i');
+    if(val[0]==='s'){
+      const e=u.sug[Number(val.slice(1))];
+      const plain=e.name.replace(/[,;()]/g,' ').replace(/\s+/g,' ').trim();
+      ta=ta.replace(rx,()=>plain);
+    }else if(val[0]==='o'){
+      P().learnProduct(u.label,u.online[Number(val.slice(1))]);
+    }else{
+      const g=k=>{const x=String(block.querySelector('[data-m="'+k+'"]').value).replace(',','.').trim();return x===''?NaN:Number(x)};
+      const v=[g('k'),g('p'),g('c'),g('f')];
+      if(!v.every(Number.isFinite)||v[0]<0||v[0]>950){toast('Bitte für „'+u.label+'“ kcal, Eiweiß, KH und Fett eintragen.');return}
+      window.GSFoodIndex.importCatalogue([{name:u.label,aliases:[u.label],menge:100,einheit:'g',kcal:v[0],protein_g:v[1],kohlenhydrate_g:v[2],fett_g:v[3],sicher:false,marke_oder_quelle:'Selbst eingetragen (Rezept)'}]);
+    }
+  }
+  $('gsRecipeIng').value=ta;writeDraft();
+  window.GSFoodIndex.refresh();calculate();
+}
+function showResult(entries){
+  const out=$('gsRecipeResult');
+  const t=totals(entries),finished=Number($('gsRecipeWeight').value)>0?Number($('gsRecipeWeight').value):Math.round(t.grams);
   const k=100/finished,portions=Number($('gsRecipePortions').value)>0?Number($('gsRecipePortions').value):0,pg=portions?finished/portions:0;
-  parsed={entries:res.entries,totals:t,finished,portions,per100:{kcal:r1(t.kcal*k),p:r1(t.p*k),c:r1(t.c*k),f:r1(t.f*k),fiber:r1(t.fiber*k)},portionGrams:pg?Math.round(pg):0};
+  parsed={entries,totals:t,finished,portions,per100:{kcal:r1(t.kcal*k),p:r1(t.p*k),c:r1(t.c*k),f:r1(t.f*k),fiber:r1(t.fiber*k)},portionGrams:pg?Math.round(pg):0};
   out.innerHTML='<div class="card" style="box-shadow:none;padding:12px;background:var(--green2)"><h3 style="margin:0 0 8px">Zutaten</h3>'+
-    res.entries.map(e=>'<div class="gs-rline"><span>'+esc(e.name)+' · '+r1(e.qty)+' '+esc(e.unit)+(e.assumption?' <small>('+esc(e.assumption)+')</small>':'')+'</span><b>'+Math.round(e.kcal)+' kcal</b></div>').join('')+
+    entries.map(e=>'<div class="gs-rline"><span>'+esc(e.name)+' · '+r1(e.qty)+' '+esc(e.unit)+(e.assumption?' <small>('+esc(e.assumption)+')</small>':'')+'</span><b>'+Math.round(e.kcal)+' kcal</b></div>').join('')+
     '<div class="gs-rline"><strong>Gesamt ('+Math.round(finished)+' g fertig)</strong><strong>'+Math.round(t.kcal)+' kcal</strong></div></div>'+
     '<div class="mini-stats" style="margin:10px 0"><span>Pro 100 g <strong>'+Math.round(parsed.per100.kcal)+' kcal</strong></span><span>Eiweiß <strong>'+parsed.per100.p+' g</strong></span><span>KH <strong>'+parsed.per100.c+' g</strong></span><span>Fett <strong>'+parsed.per100.f+' g</strong></span>'+
     (portions?'<span>1 Portion ≈ <strong>'+parsed.portionGrams+' g / '+Math.round(t.kcal/portions)+' kcal</strong></span>':'')+'</div>'+
@@ -93,25 +186,21 @@ function calculate(){
     (editingId?'<button type="button" class="btn warn" id="gsRecipeDelete" style="width:100%;margin-top:8px">Rezept löschen</button>':'');
 }
 function onResultClick(e){
-  const sg=e.target.closest('[data-r-sug]');
-  if(sg){
-    const ta=$('gsRecipeIng'),label=pendingUnknown||'';
-    const rx=new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i');
-    const plain=sg.dataset.rSug.replace(/[,;]/g,' ').replace(/\s+/g,' ').trim();
-    ta.value=rx.test(ta.value)?ta.value.replace(rx,()=>plain):ta.value;calculate();return;
-  }
-  if(e.target.closest('[data-r-manual]')){
-    const v=id=>{const x=String($(id).value).replace(',','.').trim();return x===''?NaN:Number(x)};
-    const vals=[v('rK'),v('rP'),v('rC'),v('rF')];
-    if(!vals.every(Number.isFinite)||vals[0]<0||vals[0]>950){toast('Bitte kcal, Eiweiß, KH und Fett pro 100 g eintragen.');return}
-    window.GSFoodIndex.importCatalogue([{name:pendingUnknown,aliases:[pendingUnknown],menge:100,einheit:'g',kcal:vals[0],protein_g:vals[1],kohlenhydrate_g:vals[2],fett_g:vals[3],sicher:false,marke_oder_quelle:'Selbst eingetragen (Rezept)'}]);
-    window.GSFoodIndex.refresh();calculate();return;
+  if(e.target.closest('[data-r-apply]'))return applyUnknowns();
+  const radio=e.target.closest('input[type=radio]');
+  if(radio){
+    const block=radio.closest('[data-unk]');if(!block)return;
+    const i=block.dataset.unk,show=radio.value==='m';
+    unknowns[i].pick=radio.value;
+    block.querySelector('[data-manual="'+i+'"]').style.display=show?'':'none';
+    block.querySelector('[data-manual-f="'+i+'"]').style.display=show?'':'none';
+    return;
   }
   if(e.target.closest('#gsRecipeSave'))return save();
   if(e.target.closest('#gsRecipeDelete')){
     if(!confirm('Rezept wirklich löschen? Bereits gegessene Einträge bleiben erhalten.'))return;
     const list=recipes(),i=list.findIndex(r=>r.id===editingId);if(i>=0)list.splice(i,1);
-    saveSettings();afterChange();close();toast('Rezept gelöscht');
+    saveSettings();afterChange();clearDraft();hide();toast('Rezept gelöscht');
   }
 }
 function save(){
@@ -124,7 +213,7 @@ function save(){
     totalGrams:parsed.finished,portions:parsed.portions||0,portionGrams:parsed.portionGrams||0,per100:parsed.per100,updated:new Date().toISOString()};
   const i=list.findIndex(r=>r.id===rec.id);
   if(i>=0)list[i]=rec;else list.push(rec);
-  saveSettings();afterChange();close();
+  saveSettings();afterChange();clearDraft();hide();
   toast('Rezept gespeichert ✓ – tippe z. B. „250 g '+name+'“');
 }
 function afterChange(){
@@ -156,7 +245,13 @@ function setup(){
     $('gsRecipeList').addEventListener('click',e=>{const b=e.target.closest('[data-recipe-edit]');if(b)open(recipes().find(r=>r.id===b.dataset.recipeEdit))});
     renderList();
   }
+  // Nach einem Neuladen (z. B. weil iOS die Seite im Hintergrund beendet hat) den offenen Entwurf wiederherstellen.
+  const d=readDraft();
+  if(d&&d.open){
+    ensureModal();editingId=d.editingId||null;fill(d);show();
+    if(d.ing&&d.ing.trim())calculate();
+  }
 }
 window.GSRecipes={open,recipes,totals};
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(setup,220));else setTimeout(setup,220);
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(setup,260));else setTimeout(setup,260);
 })();

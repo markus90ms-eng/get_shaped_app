@@ -51,7 +51,7 @@ function buildList(){
   for(const e of window.GSFoodIndex?.entries?.()||[]){
     const key=norm(e.name);
     if(!key||hiddenKeys.has(key)||e.meal||(MEAL.test(key)&&!e.recipe)||e.estimate||seen.has(key)||![e.kcal,e.p,e.c,e.f].every(Number.isFinite))continue;
-    seen.set(key,{key,recipe:!!e.recipe,name:e.name,kcal:e.kcal,p:e.p,c:e.c,f:e.f,unit:e.unit==='ml'||/milch|bruhe|saft|kaffee|\btee\b/.test(key)?'ml':'g',piece:!!e.virtualPiece});
+    seen.set(key,{key,recipe:!!e.recipe,generic:!!e.generic,name:e.name,kcal:e.kcal,p:e.p,c:e.c,f:e.f,unit:e.unit==='ml'||/milch|bruhe|saft|kaffee|\btee\b/.test(key)?'ml':'g',piece:!!e.virtualPiece});
   }
   const counts=usageCounts();
   const items=dedupe([...seen.values()].map(x=>({...x,uses:counts.get(x.key)||0})));
@@ -68,14 +68,16 @@ function rebuildPresets(){
   list=buildList();
   const favKeys=new Set(window.GSFavorites?.foods?.()||[]);
   const recipes=list.filter(x=>x.recipe);
+  const generic=list.filter(x=>x.generic),own=list.filter(x=>!x.generic);
   const favs=list.filter(x=>favKeys.has(x.key)&&!x.recipe);
-  const top=[...list].filter(x=>x.uses>0&&!favKeys.has(x.key)).sort((a,b)=>b.uses-a.uses||a.name.localeCompare(b.name,'de')).slice(0,TOP);
+  const top=[...list].filter(x=>x.uses>0&&!favKeys.has(x.key)&&!x.generic).sort((a,b)=>b.uses-a.uses||a.name.localeCompare(b.name,'de')).slice(0,TOP);
   const opt=(x)=>'<option value="'+list.indexOf(x)+'">'+esc(label(x,false))+'</option>';
   sel.innerHTML='<option value="">— Frei eingeben —</option>'+
     (recipes.length?'<optgroup label="🍲 Meine Rezepte">'+recipes.map(opt).join('')+'</optgroup>':'')+
     (favs.length?'<optgroup label="★ Favoriten">'+favs.map(opt).join('')+'</optgroup>':'')+
     (top.length?'<optgroup label="⭐ Häufig genutzt">'+top.map(x=>'<option value="'+list.indexOf(x)+'">'+esc(label(x,true))+'</option>').join('')+'</optgroup>':'')+
-    '<optgroup label="Alle Lebensmittel ('+list.length+')">'+list.map(opt).join('')+'</optgroup>';
+    '<optgroup label="Alle Lebensmittel ('+own.length+')">'+own.map(opt).join('')+'</optgroup>'+
+    (generic.length?'<optgroup label="Weitere Lebensmittel (nur per Suche)">'+generic.map(opt).join('')+'</optgroup>':'');
   if(keep!==''&&sel.querySelector('option[value="'+keep+'"]'))sel.value=keep;
 }
 function fill(item,qty){

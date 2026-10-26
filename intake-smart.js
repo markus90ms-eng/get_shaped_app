@@ -9,7 +9,7 @@ const normalize=s=>String(s??'').toLocaleLowerCase('de').replace(/ß/g,'ss')
   .normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ae/g,'a').replace(/oe/g,'o').replace(/ue/g,'u')
   .replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const unitExpr='milliliter|gramm|liter|esslöffel|essloffel|teelöffel|teeloffel|portionen|portion|scheiben|scheibe|stücke|stück|stuecke|stueck|tassen|tasse|kg|ml|gr|g|l|el|tl|stk\\.?';
+const unitExpr='milliliter|gramm|liter|esslöffel|essloffel|teelöffel|teeloffel|handvoll|prisen|prise|schuss|gläser|glas|glaeser|becher|teller|schüssel|schuessel|portionen|portion|scheiben|scheibe|stücke|stück|stuecke|stueck|tassen|tasse|kg|ml|gr|g|l|el|tl|stk\\.?';
 const beginRx=new RegExp('^(\\d+(?:[.,]\\d+)?)\\s*(?:('+unitExpr+')\\s*)?\\s+(.+?)\\s*$','i');
 const endRx=new RegExp('^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*('+unitExpr+')\\s*$','i');
 const lowNumbers={ein:1,eine:1,einen:1,einem:1,einer:1,zwei:2,drei:3,vier:4,fuenf:5,fünf:5,sechs:6,sieben:7,acht:8,neun:9,zehn:10,halbe:0.5,halb:0.5,halben:0.5};
@@ -112,6 +112,12 @@ function unitInfo(count,unit,item){
  else if(u==='l'||u==='liter'){qty=count*1000;displayUnit='ml';}
  else if(['ml','milliliter'].includes(u)){displayUnit='ml';}
  else if(['g','gr','gramm'].includes(u)){}
+ else if(['handvoll','prise','prisen','schuss','glas','glaser','glaeser','becher','teller','schussel','schuessel'].includes(u)){
+   const name=normalize(item.name),liquid=item.unit==='ml'||/wein|sekt|bier|saft|milch|cola|drink|brühe|bruhe|tee|kaffee|ol$/.test(name);
+   const per={handvoll:30,prise:1,prisen:1,schuss:10,glas:/wein|sekt|prosecco/.test(name)?150:/bier/.test(name)?330:200,glaser:200,glaeser:200,becher:150,teller:350,schussel:300,schuessel:300}[u];
+   qty=count*per;displayUnit=(liquid&&['schuss','glas','glaser','glaeser'].includes(u))||item.unit==='ml'?'ml':'g';mass=qty;
+   assumption=(u==='glas'||u==='glaser'||u==='glaeser'?'Glas':u.charAt(0).toUpperCase()+u.slice(1))+' ≈ '+per+' '+displayUnit+' (Richtwert)';
+ }
  else if(['tl','teeloffel'].includes(u)){const sp=spoonGrams(item,0);if(sp){qty=count*sp;mass=qty;assumption='Teelöffel ≈ '+sp+' g (Richtwert)';}else{qty=count*5;displayUnit='ml';assumption='Teelöffel ≈ 5 ml';}}
  else if(['el','essloffel'].includes(u)){const sp=spoonGrams(item,1);if(sp){qty=count*sp;mass=qty;assumption='Esslöffel ≈ '+sp+' g (Richtwert)';}else{qty=count*15;displayUnit='ml';assumption='Esslöffel ≈ 15 ml';}}
  else if(['tasse','tassen'].includes(u)){
@@ -279,52 +285,71 @@ function offerScore(p,label){
  const good=words.filter(x=>name.includes(x)||brand.includes(x)).length;
  return good/Math.max(words.length,1)*10+(target===name?20:0)+(target===brand+' '+name?20:0);
 }
+// ---- Online-Recherche (Open Food Facts): zwischengespeichert, nacheinander, ohne Verlust bei weiterem Tippen ----
+const searchCache=new Map();
+let searchChain=Promise.resolve(),lastNet=0;
+function toCandidates(data){
+ return (data.products||[]).map(p=>{
+   let m=p.nutriments||{},kcal=Number(m['energy-kcal_100g']);
+   if(!Number.isFinite(kcal)) {const kj=Number(m['energy-kj_100g']);kcal=Number.isFinite(kj)?kj/4.184:NaN}
+   const pro=Number(m.proteins_100g),carbs=Number(m.carbohydrates_100g),fat=Number(m.fat_100g),fiber=m.fiber_100g===undefined?NaN:Number(m.fiber_100g);
+   if(![kcal,pro,carbs,fat].every(Number.isFinite)||kcal<0||kcal>900||pro<0||carbs<0||fat<0||pro>100||carbs>100||fat>100)return null;
+   // Offensichtlich fehlerhafte Nutzerdaten aussortieren: Energie muss grob zu Eiweiß/KH/Fett passen.
+   const atwater=4*pro+4*carbs+9*fat+2*(Number.isFinite(fiber)?fiber:0);
+   if(kcal>=30&&Math.abs(kcal-atwater)>Math.max(40,kcal*0.35))return null;
+   const name=String(p.product_name_de||p.product_name||'').trim();
+   return name?{name,brand:String(p.brands||'').split(',')[0].trim(),kcal,p:pro,c:carbs,f:fat,fiber,code:String(p.code||'')}:null;
+ }).filter(Boolean);
+}
+async function netSearch(query,germanOnly){
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
+ try{
+   const url=new URL(LOOKUP_URL);
+   const params=[['search_terms',query],['search_simple','1'],['action','process'],['json','1'],['page_size','24'],['fields','code,product_name,product_name_de,brands,nutriments']];
+   if(germanOnly)params.push(['tagtype_0','countries'],['tag_contains_0','contains'],['tag_0','germany']);
+   params.forEach(([k,v])=>url.searchParams.set(k,v));
+   const response=await fetch(url.toString(),{signal:controller.signal,headers:{Accept:'application/json'}});
+   if(!response.ok)throw Error('HTTP '+response.status);
+   return toCandidates(await response.json());
+ }finally{clearTimeout(timeout)}
+}
+// Liefert Produktvorschläge für einen Begriff (zuerst Deutschland, dann weltweit); Anfragen laufen nacheinander mit Mindestabstand.
+function fetchCandidates(term){
+ const query=String(term||'').trim().slice(0,95),key=normalize(query);
+ if(!key)return Promise.resolve([]);
+ if(searchCache.has(key))return Promise.resolve(searchCache.get(key));
+ const run=async()=>{
+   const wait=Math.max(0,1300-(Date.now()-lastNet));if(wait)await new Promise(r=>setTimeout(r,wait));
+   lastNet=Date.now();
+   let list=await netSearch(query,true);
+   if(list.length<3){lastNet=Date.now();const more=await netSearch(query,false);list=[...list,...more.filter(x=>!list.some(y=>y.code===x.code))]}
+   list.sort((a,b)=>offerScore(b,query)-offerScore(a,query));
+   searchCache.set(key,list);return list;
+ };
+ const p=searchChain.then(run,run);searchChain=p.catch(()=>{});return p;
+}
 async function researchUnknown(term,fullText,force=false) {
- const query=String(term||'').trim().slice(0,95),needle=normalize(query);
- if(!query||lookupBusy)return;
- if(!force&&Date.now()-lastLookup<6500)return;
+ const query=String(term||'').trim().slice(0,95);
+ if(!query)return;
  const ownToken=++lookupToken;
  const node=$('gsProductLookup');
  if(!node)return;
- lastLookup=Date.now();lastSearchTerm=query;currentUnknown=query;lookupBusy=true;
- node.innerHTML='<div class="hint">🔎 Recherchiere automatisch „'+escape(query)+'“ in der Produktdatenbank …</div>';
- const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),11500);
+ lastSearchTerm=query;currentUnknown=query;
+ node.innerHTML='<div class="hint">🔎 Suche „'+escape(query)+'“ in der Produktdatenbank …</div>';
  try{
-   const toCandidates=data=>(data.products||[]).map(p=>{
-      let m=p.nutriments||{},kcal=Number(m['energy-kcal_100g']);
-      if(!Number.isFinite(kcal)) {const kj=Number(m['energy-kj_100g']);kcal=Number.isFinite(kj)?kj/4.184:NaN}
-      const pro=Number(m.proteins_100g),carbs=Number(m.carbohydrates_100g),fat=Number(m.fat_100g),fiber=m.fiber_100g===undefined?NaN:Number(m.fiber_100g);
-      if(![kcal,pro,carbs,fat].every(Number.isFinite)||kcal<0||kcal>900||pro<0||carbs<0||fat<0||pro>100||carbs>100||fat>100)return null;
-      // Offensichtlich fehlerhafte Nutzerdaten aussortieren: Energie muss grob zu Eiweiß/KH/Fett passen.
-      const atwater=4*pro+4*carbs+9*fat+2*(Number.isFinite(fiber)?fiber:0);
-      if(kcal>=30&&Math.abs(kcal-atwater)>Math.max(40,kcal*0.35))return null;
-      const name=String(p.product_name_de||p.product_name||'').trim();
-      return name?{name,brand:String(p.brands||'').split(',')[0].trim(),kcal,p:pro,c:carbs,f:fat,fiber,code:String(p.code||'')}:null;
-   }).filter(Boolean);
-   const search=async(germanOnly)=>{
-     const url=new URL(LOOKUP_URL);
-     const params=[['search_terms',query],['search_simple','1'],['action','process'],['json','1'],['page_size','24'],['fields','code,product_name,product_name_de,brands,nutriments']];
-     if(germanOnly)params.push(['tagtype_0','countries'],['tag_contains_0','contains'],['tag_0','germany']);
-     params.forEach(([k,v])=>url.searchParams.set(k,v));
-     const response=await fetch(url.toString(),{signal:controller.signal,headers:{Accept:'application/json'}});
-     if(!response.ok)throw Error('HTTP '+response.status);
-     return toCandidates(await response.json());
-   };
-   let candidates=await search(true);
-   if(candidates.length<3)candidates=[...candidates,...(await search(false)).filter(x=>!candidates.some(y=>y.code===x.code))];
-   candidates.sort((a,b)=>offerScore(b,query)-offerScore(a,query));
-   if(ownToken!==lookupToken||$('quickSpeech').value.trim()!==fullText)return;
+   const candidates=await fetchCandidates(query);
+   if(ownToken!==lookupToken)return;                               // inzwischen wurde etwas anderes gesucht oder die Eingabe erfolgreich ausgewertet
    productOffers=candidates.slice(0,7);
    const best=candidates[0],second=candidates[1];
    // Nur bei eindeutig identischem Produkt und Brand automatisch übernehmen.
    const score=best?offerScore(best,query):0,score2=second?offerScore(second,query):0;
    const strong=best&&score>=26&&score-score2>8&&normalize(query)===normalize(best.name+' '+best.brand);
-   if(strong){learnProduct(query,best);analyze(fullText,false);return}
-   renderProductOffers(query,productOffers,candidates.length?'':"Keine vollständigen, passenden Nährwertangaben in der Datenbank gefunden.");
+   if(strong){learnProduct(query,best);analyze($('quickSpeech').value.trim()||fullText,false);return}
+   renderProductOffers(query,productOffers,candidates.length?'':"In der Produktdatenbank nichts Passendes gefunden. Prüfe die Vorschläge oben oder trage die Werte selbst ein.");
  }catch(e){
-   if(ownToken!==lookupToken||$('quickSpeech').value.trim()!==fullText)return;
-   renderProductOffers(query,[],'Automatische Produktrecherche derzeit nicht erreichbar. Grund: '+e.message+'. Die App kann dieses Produkt ohne überprüfte Nährwerte nicht automatisch berechnen.');
- }finally{clearTimeout(timeout);lookupBusy=false}
+   if(ownToken!==lookupToken)return;
+   renderProductOffers(query,[],'Online-Suche gerade nicht möglich ('+(e.name==='AbortError'?'Zeitüberschreitung':e.message)+'). Bist du online? Du kannst die Werte auch selbst eintragen.');
+ }
 }
 function learnProduct(key,p){
  const item={name:p.name+' · '+(p.brand||'Produkt'),kcal:p.kcal,p:p.p,c:p.c,f:p.f,source:p.manual?'Selbst eingetragen':'Open Food Facts'+(p.code?' / Barcode '+p.code:'')};
@@ -366,7 +391,7 @@ function applySuggestion(name,label){
  t=rx.test(t)?t.replace(rx,()=>plain):(t?t+', ':'')+plain;
  box.value=t;renderSuggestions('');analyze(t,false);
 }
-function analyze(text,allowSearch=true){
+function analyze(text,allowSearch=true,immediate=false){
  const content=String(text||'').trim();
  if(!content){clearDraft();renderSuggestions('');return false}
  const recovered=oldMeal(content);
@@ -378,13 +403,12 @@ function analyze(text,allowSearch=true){
   show(p.error+' Es wird keine unvollständige Kalorienzahl gespeichert.',true);
   renderSuggestions(suggestionChips(p,content));
   if(p.unknown&&allowSearch){
-    const lookup=()=>researchUnknown(p.unknown.label,content);
-    if(!lookupBusy&&Date.now()-lastLookup>=6500)lookup();
-    else if(!lookupBusy){clearTimeout(researchTimer);researchTimer=setTimeout(lookup,6500-Math.min(6499,Date.now()-lastLookup));}
+    clearTimeout(researchTimer);
+    researchTimer=setTimeout(()=>researchUnknown(p.unknown.label,content),immediate?0:600);
   }
   return false;
  }
- lastError='';renderSuggestions('');fillDraft(p.entries,content);
+ lastError='';clearTimeout(researchTimer);lookupToken++;if($('gsProductLookup'))$('gsProductLookup').innerHTML='';renderSuggestions('');fillDraft(p.entries,content);
  const guessed=p.entries.filter(x=>x.assumed);
  if(guessed.length){
    show('Menge angenommen: '+guessed.map(x=>x.name+' – '+(x.assumption||'').split(';')[0]).join(' · ')+'. Bitte prüfen oder unten die Menge ändern.',true);
@@ -452,7 +476,8 @@ function setup(){
    if(q){$('foodGrams').value=q.dataset.setQty;$('foodGrams').dispatchEvent(new Event('input',{bubbles:true}));}
  });
  productLookup.addEventListener('click',e=>{const el=e.target.closest('[data-choose-product]');if(el){chooseProduct(Number(el.dataset.chooseProduct));return}if(e.target.closest('[data-manual-product]')){manualForm(currentUnknown||'');return}if(e.target.closest('[data-manual-save]'))saveManual();});
- $('parseSpeech').onclick=()=>analyze($('quickSpeech').value);
+ $('parseSpeech').onclick=()=>analyze($('quickSpeech').value,true,true);
+ $('quickSpeech').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();clearTimeout(timer);analyze($('quickSpeech').value,true,true);}});
  $('quickSpeech').addEventListener('input',()=>{
   clearTimeout(timer);
   const s=$('quickSpeech').value.trim();
@@ -460,7 +485,7 @@ function setup(){
   timer=setTimeout(()=>analyze(s),500);
  });
  $('nutCalculate').onclick=()=>{
-  if($('quickSpeech').value.trim())return analyze($('quickSpeech').value);
+  if($('quickSpeech').value.trim())return analyze($('quickSpeech').value,true,true);
   const name=$('foodName').value.trim(),qty=number($('foodGrams').value),unit=getUnit();
   if(!name){show('Bitte Lebensmittel oder Gericht nennen.',true);return;}
   if(qty>0){
@@ -519,7 +544,7 @@ function setup(){
    window.location.replace(url.toString());
  };
 }
-window.GSMealParserV3={parseFreeText,standardize,splitFood,itemFromSegment,oldMeal,summarize,researchUnknown,offerScore};
+window.GSMealParserV3={fetchCandidates,learnProduct,parseFreeText,standardize,splitFood,itemFromSegment,oldMeal,summarize,researchUnknown,offerScore};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup);
 else setup();
 })();

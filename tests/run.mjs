@@ -63,4 +63,8 @@ vm.runInContext("var settings={recipes:[{id:'r1',name:'Chili con Carne',aliases:
 ctx.GSFoodIndex.refresh();
 await new Promise(r=>setTimeout(r,10));
 assert.equal(match('Chili con Carne').kcal,150);assert.equal(match('Chili').kcal,150);assert.equal(match('Chili').recipe,true);
+// Allgemeine Lebensmittel (Wild, Gemüse …) werden ohne Netz gefunden
+vm.runInContext(fs.readFileSync(new URL('../generic-foods.js',import.meta.url),'utf8'),ctx);
+assert.equal(match('Rehrücken').kcal,110);assert.equal(match('Rehrücken').generic,true);
+assert.equal(match('Grünkohl').p,4.3);assert.equal(match('Hirschfleisch').name,'Hirsch');
 console.log('App-Tests ok');

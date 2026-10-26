@@ -25,6 +25,7 @@ function render(filter=''){
   const q=norm(filter).split(' ').filter(Boolean);
   const html=['<button type="button" class="gs-row" data-pick="">— Frei eingeben —</button>'];
   for(const g of groups()){
+    if(/^Weitere/.test(g.label)&&!q.length)continue;                       // erst bei Suche anzeigen
     const rows=g.items.filter(x=>q.every(w=>norm(x.item.name).includes(w)));
     if(!rows.length)continue;
     html.push('<div class="gs-group">'+esc(g.label)+'</div>');
