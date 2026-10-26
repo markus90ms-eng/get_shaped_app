@@ -3,7 +3,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const CUSTOM_KEY='get_shaped_custom_activities';
-const BASE_ACTIVITIES=['Spaziergang','Stepper','Homeworkout','Krafttraining Gym','Mobility / Dehnen','Haushalt / Gartenarbeit','Sauna','Sonstiges'];
+const BASE_ACTIVITIES=['Spaziergang','Walkingpad / Laufband','Stepper','Homeworkout','Krafttraining Gym','Mobility / Dehnen','Haushalt / Gartenarbeit','Sauna','Sonstiges'];
 const TOP=12;
 const norm=s=>window.GSFoodIndex?.norm?window.GSFoodIndex.norm(s):String(s||'').toLowerCase();
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

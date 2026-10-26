@@ -69,7 +69,7 @@
     </div>
     <div class="stack">
       <article class="card"><h2>🏃 Bewegung eintragen</h2>
-        <div class="fieldrow"><div class="field"><label class="label" for="activityType">Art</label><select id="activityType"><option>Spaziergang</option><option>Stepper</option><option>Homeworkout</option><option>Krafttraining Gym</option><option>Mobility / Dehnen</option><option>Haushalt / Gartenarbeit</option><option>Sauna</option><option>Sonstiges</option></select></div><div class="field"><label class="label" for="activityMins">Dauer (Min.)</label><input type="number" id="activityMins" min="0" inputmode="numeric" placeholder="30"/></div></div>
+        <div class="fieldrow"><div class="field"><label class="label" for="activityType">Art</label><select id="activityType"><option>Spaziergang</option><option>Walkingpad / Laufband</option><option>Stepper</option><option>Homeworkout</option><option>Krafttraining Gym</option><option>Mobility / Dehnen</option><option>Haushalt / Gartenarbeit</option><option>Sauna</option><option>Sonstiges</option></select></div><div class="field"><label class="label" for="activityMins">Dauer (Min.)</label><input type="number" id="activityMins" min="0" inputmode="numeric" placeholder="30"/></div></div>
         <p class="sub">Für eine Verbrauchsschätzung bitte die Dauer angeben. Schrittzahlen ohne Zeit werden dokumentiert, aber nicht in kcal umgerechnet (Stepper zählt teils nur ein Bein).</p><div class="fieldrow"><div class="field"><label class="label" for="activitySteps">Schritte (optional)</label><input type="number" id="activitySteps" min="0" inputmode="numeric" placeholder="3000"/></div><div class="field"><label class="label" for="activityIntensity">Intensität</label><select id="activityIntensity"><option>Leicht</option><option selected>Moderat</option><option>Intensiv</option></select></div></div>
         <div class="field"><label class="label" for="activityNote">Notiz</label><input id="activityNote" placeholder="z. B. Hanteln 2 × 5 kg, Band ..."/></div><button class="btn second" id="saveActivity" style="width:100%">Bewegung speichern</button>
         <hr class="divider"/><div id="activityEntries" class="empty">Noch keine Bewegung eingetragen.</div>
@@ -251,7 +251,7 @@ initPresetDropdown();refreshRecent();render();if('serviceWorker'in navigator&&lo
 <script src="./backup-reminder.js?v=19"></script>
 <script src="./intake-smart.js?v=41"></script>
 <script src="./fiber.js?v=34"></script>
-<script src="./presets-activities.js?v=41"></script>
+<script src="./presets-activities.js?v=42"></script>
 <script src="./preset-picker.js?v=41"></script>
 <script src="./fiber-csv.js?v=22"></script>
 <script src="./trends.js?v=23"></script>
@@ -267,6 +267,7 @@ initPresetDropdown();refreshRecent();render();if('serviceWorker'in navigator&&lo
 <script src="./split-save.js?v=38"></script>
 <script src="./recipes.js?v=41"></script>
 <script src="./cancel-input.js?v=40"></script>
+<script src="./steps-kcal.js?v=42"></script>
 <script src="./draft-meal.js?v=41"></script>
 </body>
 </html>
